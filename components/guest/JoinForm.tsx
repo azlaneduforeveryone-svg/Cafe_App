@@ -1,0 +1,158 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Bell, Ticket } from "lucide-react";
+import { unlockAudio } from "@/lib/chime";
+import { fmt } from "@/lib/format";
+import type { Dict } from "@/lib/i18n";
+import type { Locale, PublicRestaurant } from "@/lib/types";
+
+const SIZES = [1, 2, 3, 4, 5, 6, 7, 8];
+export const ticketKey = (slug: string) => `tp_ticket_${slug}`;
+
+export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; locale: Locale; restaurant: PublicRestaurant; eta: number; waiting: number }) {
+  const router = useRouter();
+  const [partySize, setPartySize] = useState(2);
+  const [sectionId, setSectionId] = useState(restaurant.sections[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const [existing, setExisting] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      // Reading localStorage must wait until the page is in the browser.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExisting(localStorage.getItem(ticketKey(restaurant.slug)));
+    } catch {}
+  }, [restaurant.slug]);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    unlockAudio(); // this tap lets the ticket page play the chime later
+    setBusy(true);
+    setError(false);
+    const form = new FormData(e.currentTarget);
+    const res = await fetch(`/api/r/${restaurant.slug}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.get("name"), phone: form.get("phone"), partySize, sectionId, lang: locale }),
+    }).catch(() => null);
+    if (res?.ok) {
+      const { token } = (await res.json()) as { token: string };
+      try {
+        localStorage.setItem(ticketKey(restaurant.slug), token);
+      } catch {}
+      router.push(`/r/${restaurant.slug}/t/${token}`);
+    } else {
+      setError(true);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      {existing && (
+        <div className="p-3 rounded-2xl bg-amber-50 border border-gold/50 text-xs font-semibold flex items-center justify-between gap-2">
+          <span>{t.existingTicket}</span>
+          <Link href={`/r/${restaurant.slug}/t/${existing}`} className="shrink-0 px-3 py-1.5 rounded-lg bg-ink text-white font-bold inline-flex items-center gap-1">
+            <Ticket className="w-3.5 h-3.5" aria-hidden />
+            {t.openTicket}
+          </Link>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl p-3.5 border border-line shadow-sm flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-extrabold text-base">{t.joinTitle}</h1>
+          <p className="text-xs text-stone-500 mt-0.5">{t.joinSub}</p>
+        </div>
+        <div className="shrink-0 bg-cream border border-gold/50 rounded-xl px-3 py-2 text-center">
+          <span className="block text-[10px] font-bold uppercase text-stone-500">{t.estWait}</span>
+          <span className="text-base font-extrabold text-ember">
+            ~{eta} {t.min}
+          </span>
+          <span className="block text-[10px] text-stone-500">{fmt(t.partiesWaiting, { n: waiting })}</span>
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="block text-xs font-bold text-stone-700 mb-1">{t.yourName}</span>
+        <input
+          name="name"
+          required
+          maxLength={60}
+          autoComplete="given-name"
+          placeholder={t.namePh}
+          className="w-full px-3.5 py-3 rounded-xl bg-white border border-line text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ember"
+        />
+      </label>
+
+      <fieldset>
+        <legend className="block text-xs font-bold text-stone-700 mb-1.5">{t.partySize}</legend>
+        <div className="grid grid-cols-4 gap-1.5">
+          {SIZES.map((n) => (
+            <button
+              type="button"
+              key={n}
+              aria-pressed={partySize === n}
+              onClick={() => setPartySize(n)}
+              className={`py-2.5 rounded-xl text-sm font-extrabold border transition-all ${
+                partySize === n ? "bg-ink text-white border-ink shadow-sm" : "bg-white text-stone-700 border-line hover:border-stone-400"
+              }`}
+            >
+              <span className="ltr">{n === 8 ? "8+" : n}</span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {restaurant.sections.length > 1 && (
+        <fieldset>
+          <legend className="block text-xs font-bold text-stone-700 mb-1.5">{t.section}</legend>
+          <div className="grid grid-cols-2 gap-1.5">
+            {restaurant.sections.map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                aria-pressed={sectionId === s.id}
+                onClick={() => setSectionId(s.id)}
+                className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all ${
+                  sectionId === s.id ? "bg-ember/10 text-ember border-ember" : "bg-white text-stone-600 border-line"
+                }`}
+              >
+                {s[locale] || s.en}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      <label className="block">
+        <span className="block text-xs font-bold text-stone-700 mb-1">{t.phoneLabel}</span>
+        <input
+          name="phone"
+          type="tel"
+          dir="ltr"
+          maxLength={20}
+          autoComplete="tel"
+          placeholder={restaurant.country === "SA" ? "+966 5X XXX XXXX" : "+92 3XX XXXXXXX"}
+          className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-line text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ember"
+        />
+        <span className="block text-[11px] text-stone-500 mt-1">{t.phoneHelp}</span>
+      </label>
+
+      {error && <p role="alert" className="text-sm font-semibold text-red-700">{t.errorGeneric}</p>}
+
+      <button
+        type="submit"
+        disabled={busy}
+        className="w-full py-4 rounded-2xl bg-ember hover:bg-ember-dark active:scale-[0.98] disabled:opacity-60 text-white font-extrabold text-sm shadow-lg shadow-ember/25 transition-all flex items-center justify-center gap-2"
+      >
+        <Bell className="w-4 h-4" aria-hidden />
+        {t.joinBtn}
+      </button>
+    </form>
+  );
+}

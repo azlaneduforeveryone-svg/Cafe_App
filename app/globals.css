@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #faf7f2;
+  --color-ink: #1c1917;
+  --color-ink-2: #292524;
+  --color-ember: #c84b31;
+  --color-ember-dark: #a83b24;
+  --color-gold: #d4a359;
+  --color-line: #e7e0d5;
+  --color-go: #15803d;
+
+  --font-en: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif-en: "Playfair Display", Georgia, serif;
+  --font-ar: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-ur: "Noto Sans Arabic", "Cairo", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
+.loc-en { font-family: var(--font-en); }
+.loc-ar { font-family: var(--font-ar); }
+.loc-ur { font-family: var(--font-ur); }
+.loc-en .display { font-family: var(--font-serif-en); }
+
+/* Ticket numbers, phones and timers always read left to right. */
+.ltr { direction: ltr; unicode-bidi: isolate; }
+
+::selection { background: var(--color-ember); color: white; }
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  50% { box-shadow: 0 0 0 18px rgba(34, 197, 94, 0); }
+}
+@keyframes gentleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-ready-glow { animation: pulseGlow 1.8s infinite; }
+.animate-ticket-float { animation: gentleFloat 4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ready-glow, .animate-ticket-float, .animate-bounce, .animate-ping, .animate-pulse { animation: none; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
