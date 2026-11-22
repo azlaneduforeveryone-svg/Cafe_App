@@ -158,3 +158,26 @@ Test checklist:
 - [ ] Guest edits a not-yet-accepted order > host sees the update; guest cancels > it disappears
 - [ ] Mark a guest with a submitted (not accepted) pre-order as No-show > the order is cancelled
 - [ ] Guest menu in Arabic and Urdu shows the right names and reads right to left
+
+---
+
+## Reports and alerts (added later)
+
+1. Supabase > **SQL Editor** > run `supabase/migrations/0003_reports.sql` (safe to re-run, read-only: one index and one report function).
+2. Optional, for demos: re-run `node --env-file=.env.local scripts/seed-demo.mjs`. It now also adds five weeks of made-up past visits and pre-orders to the demo restaurant so the Reports page has numbers. It only touches the demo restaurant.
+
+How the numbers are counted:
+- A business day runs from 4:00 AM to 3:59 AM local time (Saudi Arabia UTC+3, Pakistan UTC+5), so late-night parties count on the evening they arrived.
+- Wait time = joining the line to being called (Notify), for seated parties only.
+- Pre-order sales = accepted pre-orders of guests who were seated. Accepted orders of guests who left or didn't show are shown separately as "not collected".
+- Pre-order totals are not tax invoices. The restaurant's POS stays the source for official sales and VAT.
+- Alerts compare the last 7 full days with the 28 days before, and stay quiet until there are at least 20 parties a week.
+- The report data holds totals only (no guest names or phones), so it can later be sent to an AI summary safely.
+
+Test checklist:
+- [ ] Top bar shows **Reports**; the page opens on "Last 7 days"
+- [ ] With the demo data: the KPI cards, parties-per-day chart, busy-times grid and top dishes all show numbers
+- [ ] Switch to 30 days, This month, Last month, and a custom From/To range
+- [ ] **Daily CSV** and **Dishes CSV** download and open in Excel with Arabic and Urdu dish names readable
+- [ ] Switch the host language to Arabic and Urdu: the page reads right to left
+- [ ] A new restaurant with no visits shows "Not enough data yet" and "No parties in this period yet", with no errors

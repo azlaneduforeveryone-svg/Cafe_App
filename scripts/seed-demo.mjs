@@ -154,6 +154,80 @@ if (menuCheck) {
   if (itemErr) die("Could not add sample dishes:", itemErr);
 }
 
+// 5. Five weeks of past visits so the Reports page has something to show (needs 0003_reports.sql
+//    for the report itself, but the rows are plain entries and orders). Made-up but realistic:
+//    busier Thursday to Saturday evenings, about 1 in 3 seated parties pre-order.
+{
+  const { data: menu } = await db.from("menu_items").select("id, name_en, name_ar, name_ur, price").eq("restaurant_id", restaurantId);
+  let seed = 42;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const names = ["Ahmed", "Fatima", "Bilal", "Ayesha", "Omar", "Hina", "Usman", "Zainab", "Hamza", "Maryam"];
+  const offsetH = 5; // Pakistan time
+  const rows = [];
+  const orderPlans = [];
+  let ticket = 10_000;
+  for (let daysAgo = 35; daysAgo >= 1; daysAgo--) {
+    const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo));
+    const dow = day.getUTCDay(); // 4 Thu, 5 Fri, 6 Sat
+    const busy = dow === 4 || dow === 5 || dow === 6 ? 2 : 1;
+    const parties = Math.round((12 + rnd() * 10) * busy);
+    for (let i = 0; i < parties; i++) {
+      const localHour = rnd() < 0.25 ? 13 + Math.floor(rnd() * 3) : 19 + Math.floor(rnd() * 5); // lunch or dinner
+      const joined = new Date(day.getTime() + (localHour - offsetH) * 3_600_000 + Math.floor(rnd() * 60) * 60_000);
+      const wait = Math.round((busy === 2 && localHour >= 20 ? 22 : 12) + rnd() * 15);
+      const r = rnd();
+      const status = r < 0.08 ? "no_show" : r < 0.13 ? "left" : "seated";
+      const notified = status === "left" ? null : new Date(joined.getTime() + wait * 60_000);
+      const closed = new Date(joined.getTime() + (wait + (status === "no_show" ? 6 : 2)) * 60_000);
+      const row = {
+        restaurant_id: restaurantId,
+        ticket_number: ticket++,
+        name: pick(names),
+        party_size: 1 + Math.floor(rnd() * 6),
+        section_id: pick(["main", "family", "patio"]),
+        lang: pick(["en", "ur", "ur", "ar"]),
+        source: rnd() < 0.8 ? "qr" : "walkin",
+        status,
+        joined_at: joined.toISOString(),
+        notified_at: notified?.toISOString() ?? null,
+        notify_count: notified ? 1 : 0,
+        closed_at: closed.toISOString(),
+      };
+      rows.push(row);
+      if (menu?.length && status !== "left" && rnd() < (status === "seated" ? 0.32 : 0.15)) {
+        const lines = [...menu].sort(() => rnd() - 0.5).slice(0, 1 + Math.floor(rnd() * 2)).map((m) => ({
+          id: m.id, qty: 1 + Math.floor(rnd() * 2), nameEn: m.name_en, nameAr: m.name_ar, nameUr: m.name_ur, price: Number(m.price),
+        }));
+        orderPlans.push({ ticket: row.ticket_number, lines, created: joined.toISOString() });
+      }
+    }
+  }
+  const ids = new Map();
+  for (let i = 0; i < rows.length; i += 500) {
+    const { data, error } = await db.from("entries").insert(rows.slice(i, i + 500)).select("id, ticket_number");
+    if (error) die("Could not add past visits:", error);
+    data.forEach((e) => ids.set(e.ticket_number, e.id));
+  }
+  const { error: oCheck } = await db.from("orders").select("id").limit(1);
+  if (!oCheck && orderPlans.length) {
+    const orders = orderPlans.map((o) => ({
+      restaurant_id: restaurantId,
+      entry_id: ids.get(o.ticket),
+      status: "accepted",
+      items: o.lines,
+      total: o.lines.reduce((s, l) => s + l.qty * l.price, 0),
+      created_at: o.created,
+      updated_at: o.created,
+    }));
+    for (let i = 0; i < orders.length; i += 500) {
+      const { error } = await db.from("orders").insert(orders.slice(i, i + 500));
+      if (error) die("Could not add past pre-orders:", error);
+    }
+  }
+  console.log(`Added ${rows.length} past visits and ${orderPlans.length} pre-orders for the Reports page.`);
+}
+
 console.log("Demo ready.");
 console.log(`  Host login: ${EMAIL} / ${PASSWORD}`);
 console.log(`  Guest page: /r/${SLUG}`);
