@@ -31,13 +31,11 @@ export interface Restaurant {
 }
 
 export interface Staff {
-  id: string;
+  userId: string;
   email: string;
   name: string;
-  passwordHash: string;
   restaurantId: string;
-  role: "owner";
-  createdAt: number;
+  role: "owner" | "host";
 }
 
 export interface Entry {
@@ -57,12 +55,6 @@ export interface Entry {
   notifiedAt: number | null;
   notifyCount: number;
   closedAt: number | null;
-}
-
-export interface DB {
-  restaurants: Restaurant[];
-  staff: Staff[];
-  entries: Entry[];
 }
 
 /** Restaurant fields that are safe to send to guests. */
@@ -93,6 +85,7 @@ export interface HostEntry {
 
 export interface HostSnapshot {
   serverNow: number;
+  channel: string;
   restaurant: PublicRestaurant & {
     plan: Plan;
     alertsUsed: number;
@@ -106,6 +99,8 @@ export interface HostSnapshot {
 
 export interface TicketSnapshot {
   serverNow: number;
+  /** Restaurant id, used as the live-update channel name. */
+  channel: string;
   restaurant: PublicRestaurant;
   entry: {
     ticketNumber: number;

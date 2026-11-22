@@ -4,19 +4,19 @@ import { Brand } from "./Brand";
 import { LangSwitch } from "./LangSwitch";
 import { LogoutButton } from "./LogoutButton";
 import { HOST_COOKIE } from "@/lib/locale";
-import { FREE_LIMIT, rollPeriod } from "@/lib/queue";
+import { FREE_LIMIT, alertsUsedNow } from "@/lib/queue";
 import { restaurantName } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Restaurant } from "@/lib/types";
 
 export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "settings" | "plans" }) {
-  rollPeriod(restaurant);
+  const alertsUsed = alertsUsedNow(restaurant);
   const nav = [
     { key: "queue", href: "/dashboard", label: t.dashboard, Icon: LayoutList },
     { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings },
     { key: "plans", href: "/pricing", label: t.plans, Icon: Crown },
   ] as const;
-  const atLimit = restaurant.plan === "free" && restaurant.alertsUsed >= FREE_LIMIT;
+  const atLimit = restaurant.plan === "free" && alertsUsed >= FREE_LIMIT;
 
   return (
     <header className="no-print sticky top-0 z-40 bg-ink text-cream border-b border-ink-2 shadow-lg">
@@ -59,7 +59,7 @@ export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale:
             ) : (
               <span>
                 <span className="ltr">
-                  {restaurant.alertsUsed}/{FREE_LIMIT}
+                  {alertsUsed}/{FREE_LIMIT}
                 </span>{" "}
                 {t.alertsUsed}
               </span>

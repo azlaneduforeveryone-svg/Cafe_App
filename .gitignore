@@ -42,3 +42,6 @@ next-env.d.ts
 
 # TablePulse local data (database file and session secret)
 /.data
+
+.vercel
+.env*

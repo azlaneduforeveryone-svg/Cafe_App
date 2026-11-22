@@ -20,12 +20,31 @@ export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; loc
   const [error, setError] = useState(false);
   const [existing, setExisting] = useState<string | null>(null);
 
+  // Offer "Open my ticket" only if the saved ticket still exists and is still in line.
+  // Old or closed tickets (e.g. from before an update) are forgotten instead.
   useEffect(() => {
+    let saved: string | null = null;
     try {
-      // Reading localStorage must wait until the page is in the browser.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setExisting(localStorage.getItem(ticketKey(restaurant.slug)));
+      saved = localStorage.getItem(ticketKey(restaurant.slug));
     } catch {}
+    if (!saved) return;
+    let cancelled = false;
+    fetch(`/api/ticket/${encodeURIComponent(saved)}`, { cache: "no-store" })
+      .then(async (res) => {
+        const snap = res.ok ? ((await res.json()) as { entry?: { status?: string } }) : null;
+        const active = snap?.entry?.status === "waiting" || snap?.entry?.status === "notified";
+        if (cancelled) return;
+        if (active) setExisting(saved);
+        else if (res.status === 404 || snap) {
+          try {
+            localStorage.removeItem(ticketKey(restaurant.slug));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [restaurant.slug]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {

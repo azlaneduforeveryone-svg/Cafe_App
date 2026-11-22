@@ -1,13 +1,14 @@
 import "server-only";
-import { randomBytes, randomUUID } from "node:crypto";
-import { db, persist } from "./db";
-import { emitChange } from "./events";
+import { adminClient } from "./supabase/admin";
+import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
 import type {
+  Country,
   Entry,
   GuestAction,
   HostAction,
   HostSnapshot,
+  Plan,
   PublicRestaurant,
   Restaurant,
   Section,
@@ -16,38 +17,156 @@ import type {
 
 export const FREE_LIMIT = 150;
 const MAX_ACTIVE = 300;
+const ACTIVE = ["waiting", "notified"];
 
-const isActive = (e: Entry) => e.status === "waiting" || e.status === "notified";
+export type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string; status: number };
+const fail = (error: string, status: number) => ({ ok: false as const, error, status });
+
+// ---------------------------------------------------------------------------
+// Row mapping (database uses snake_case and ISO timestamps)
+// ---------------------------------------------------------------------------
+
+interface RestaurantRow {
+  id: string;
+  slug: string;
+  name: string;
+  name_ar: string;
+  name_ur: string;
+  country: Country;
+  sections: Section[];
+  grace_period_min: number;
+  minutes_per_party: number;
+  plan: Plan;
+  alerts_used: number;
+  alerts_period: string;
+  next_ticket: number;
+  now_serving: number;
+  created_at: string;
+}
+
+interface EntryRow {
+  id: string;
+  token: string;
+  restaurant_id: string;
+  ticket_number: number;
+  name: string;
+  party_size: number;
+  section_id: string;
+  lang: Entry["lang"];
+  phone: string;
+  source: Entry["source"];
+  status: Entry["status"];
+  on_the_way: boolean;
+  joined_at: string;
+  notified_at: string | null;
+  notify_count: number;
+  closed_at: string | null;
+}
+
+const ms = (t: string | null) => (t ? Date.parse(t) : null);
+
+export function toRestaurant(row: RestaurantRow): Restaurant {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    nameAr: row.name_ar,
+    nameUr: row.name_ur,
+    country: row.country,
+    sections: Array.isArray(row.sections) ? row.sections : [],
+    gracePeriodMin: row.grace_period_min,
+    minutesPerParty: row.minutes_per_party,
+    plan: row.plan,
+    alertsUsed: row.alerts_used,
+    alertsPeriod: row.alerts_period,
+    nextTicket: row.next_ticket,
+    nowServing: row.now_serving,
+    createdAt: Date.parse(row.created_at),
+  };
+}
+
+function toEntry(row: EntryRow): Entry {
+  return {
+    id: row.id,
+    token: row.token,
+    restaurantId: row.restaurant_id,
+    ticketNumber: row.ticket_number,
+    name: row.name,
+    partySize: row.party_size,
+    sectionId: row.section_id,
+    lang: row.lang,
+    phone: row.phone,
+    source: row.source,
+    status: row.status,
+    onTheWay: row.on_the_way,
+    joinedAt: Date.parse(row.joined_at),
+    notifiedAt: ms(row.notified_at),
+    notifyCount: row.notify_count,
+    closedAt: ms(row.closed_at),
+  };
+}
+
+/** Turns a database error into one of our short error codes. */
+function dbError(message: string | undefined): { error: string; status: number } {
+  const m = message ?? "";
+  if (m.includes("limit_reached")) return { error: "limit_reached", status: 402 };
+  if (m.includes("queue_full")) return { error: "queue_full", status: 429 };
+  if (m.includes("not_found")) return { error: "not_found", status: 404 };
+  if (m.includes("violates check constraint")) return { error: "invalid", status: 400 };
+  console.error("[tablepulse] database error:", m);
+  return { error: "server_error", status: 500 };
+}
+
+// ---------------------------------------------------------------------------
+// Reads
+// ---------------------------------------------------------------------------
 
 function currentPeriod() {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Free alerts reset at the start of each calendar month (UTC). */
-export function rollPeriod(r: Restaurant) {
-  const p = currentPeriod();
-  if (r.alertsPeriod !== p) {
-    r.alertsPeriod = p;
-    r.alertsUsed = 0;
-  }
+/** Free alerts used this month. Shows 0 once the month turns, before the next buzz saves it. */
+export const alertsUsedNow = (r: Restaurant) => (r.alertsPeriod === currentPeriod() ? r.alertsUsed : 0);
+
+export async function getRestaurantBySlug(slug: string): Promise<Restaurant | null> {
+  if (!/^[a-z0-9-]{1,60}$/.test(slug)) return null;
+  const { data } = await adminClient().from("restaurants").select("*").eq("slug", slug).maybeSingle();
+  return data ? toRestaurant(data as RestaurantRow) : null;
 }
 
-export function activeEntries(restaurantId: string): Entry[] {
-  return db()
-    .entries.filter((e) => e.restaurantId === restaurantId && isActive(e))
-    .sort((a, b) => a.joinedAt - b.joinedAt);
+export async function getRestaurantById(id: string): Promise<Restaurant | null> {
+  const { data } = await adminClient().from("restaurants").select("*").eq("id", id).maybeSingle();
+  return data ? toRestaurant(data as RestaurantRow) : null;
 }
 
-const waitingList = (restaurantId: string) => activeEntries(restaurantId).filter((e) => e.status === "waiting");
+async function activeEntries(restaurantId: string): Promise<Entry[]> {
+  const { data, error } = await adminClient()
+    .from("entries")
+    .select("*")
+    .eq("restaurant_id", restaurantId)
+    .in("status", ACTIVE)
+    .order("joined_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data as EntryRow[]).map(toEntry);
+}
 
-/** One formula everywhere: parties ahead plus you, times minutes per party. */
+async function waitingCount(restaurantId: string): Promise<number> {
+  const { count } = await adminClient()
+    .from("entries")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId)
+    .eq("status", "waiting");
+  return count ?? 0;
+}
+
+/** One formula everywhere: your place in line times minutes per party. */
 export const etaFor = (r: Restaurant, position: number) => Math.max(1, position) * r.minutesPerParty;
-export const joinEta = (r: Restaurant) => etaFor(r, waitingList(r.id).length + 1);
-export const waitingCount = (r: Restaurant) => waitingList(r.id).length;
 
-export function getRestaurantBySlug(slug: string) {
-  return db().restaurants.find((r) => r.slug === slug) ?? null;
+/** What the join page shows before a guest joins. */
+export async function joinInfo(r: Restaurant) {
+  const waiting = await waitingCount(r.id);
+  return { waiting, eta: etaFor(r, waiting + 1) };
 }
 
 export function toPublic(r: Restaurant): PublicRestaurant {
@@ -62,31 +181,42 @@ export function toPublic(r: Restaurant): PublicRestaurant {
   };
 }
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+/** Midnight in the restaurant's own time zone (neither country uses daylight saving). */
+function startOfToday(country: Country) {
+  const offset = (country === "SA" ? 3 : 5) * 3_600_000;
+  return Math.floor((Date.now() + offset) / 86_400_000) * 86_400_000 - offset;
 }
 
-export function hostSnapshot(r: Restaurant): HostSnapshot {
-  rollPeriod(r);
-  const today = startOfToday();
-  const closedToday = db().entries.filter((e) => e.restaurantId === r.id && e.closedAt !== null && e.closedAt >= today);
+export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
+  const since = new Date(startOfToday(r.country)).toISOString();
+  const [entries, closed] = await Promise.all([
+    activeEntries(r.id),
+    adminClient()
+      .from("entries")
+      .select("status, joined_at, notified_at, closed_at")
+      .eq("restaurant_id", r.id)
+      .gte("closed_at", since),
+  ]);
+  const closedToday = (closed.data ?? []) as Pick<EntryRow, "status" | "joined_at" | "notified_at" | "closed_at">[];
   const seated = closedToday.filter((e) => e.status === "seated");
   const avgWaitToday = seated.length
-    ? Math.round(seated.reduce((sum, e) => sum + ((e.notifiedAt ?? e.closedAt!) - e.joinedAt), 0) / seated.length / 60_000)
+    ? Math.round(
+        seated.reduce((sum, e) => sum + (Date.parse(e.notified_at ?? e.closed_at!) - Date.parse(e.joined_at)), 0) / seated.length / 60_000,
+      )
     : null;
+
   return {
     serverNow: Date.now(),
+    channel: r.id,
     restaurant: {
       ...toPublic(r),
       plan: r.plan,
-      alertsUsed: r.alertsUsed,
+      alertsUsed: alertsUsedNow(r),
       freeLimit: FREE_LIMIT,
       minutesPerParty: r.minutesPerParty,
       nowServing: r.nowServing,
     },
-    entries: activeEntries(r.id).map((e) => ({
+    entries: entries.map((e) => ({
       id: e.id,
       ticketNumber: e.ticketNumber,
       name: e.name,
@@ -108,19 +238,32 @@ export function hostSnapshot(r: Restaurant): HostSnapshot {
   };
 }
 
-export function entryByToken(token: string) {
-  return db().entries.find((e) => e.token === token) ?? null;
+async function entryByToken(token: string): Promise<Entry | null> {
+  if (!/^[0-9a-f]{32}$/.test(token)) return null;
+  const { data } = await adminClient().from("entries").select("*").eq("token", token).maybeSingle();
+  return data ? toEntry(data as EntryRow) : null;
 }
 
-export function ticketSnapshot(token: string): TicketSnapshot | null {
-  const e = entryByToken(token);
+export async function ticketSnapshot(token: string): Promise<TicketSnapshot | null> {
+  const e = await entryByToken(token);
   if (!e) return null;
-  const r = db().restaurants.find((x) => x.id === e.restaurantId);
+  const r = await getRestaurantById(e.restaurantId);
   if (!r) return null;
-  const waiting = waitingList(r.id);
-  const position = e.status === "waiting" ? waiting.findIndex((x) => x.id === e.id) + 1 : 0;
+
+  let position = 0;
+  if (e.status === "waiting") {
+    const { data } = await adminClient()
+      .from("entries")
+      .select("id")
+      .eq("restaurant_id", r.id)
+      .eq("status", "waiting")
+      .order("joined_at", { ascending: true });
+    position = ((data ?? []) as { id: string }[]).findIndex((x) => x.id === e.id) + 1;
+  }
+
   return {
     serverNow: Date.now(),
+    channel: r.id,
     restaurant: toPublic(r),
     entry: {
       ticketNumber: e.ticketNumber,
@@ -141,90 +284,99 @@ export function ticketSnapshot(token: string): TicketSnapshot | null {
 }
 
 // ---------------------------------------------------------------------------
-// Mutations
+// Writes
 // ---------------------------------------------------------------------------
 
 export interface JoinInput {
-  name: unknown;
-  partySize: unknown;
-  sectionId: unknown;
-  lang: unknown;
-  phone: unknown;
+  name?: unknown;
+  partySize?: unknown;
+  sectionId?: unknown;
+  lang?: unknown;
+  phone?: unknown;
 }
 
-export type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string; status: number };
-
-export function joinQueue(r: Restaurant, input: JoinInput, source: "qr" | "walkin"): Result<Entry> {
+export async function joinQueue(r: Restaurant, input: JoinInput, source: "qr" | "walkin"): Promise<Result<Entry>> {
   const name = typeof input.name === "string" ? input.name.trim().slice(0, 60) : "";
   const partySize = Number(input.partySize);
   const phone = typeof input.phone === "string" ? input.phone.trim() : "";
-  if (!name) return { ok: false, error: "name_required", status: 400 };
-  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 30) return { ok: false, error: "bad_party_size", status: 400 };
-  if (phone && !/^[+\d][\d\s-]{5,19}$/.test(phone)) return { ok: false, error: "bad_phone", status: 400 };
-  if (activeEntries(r.id).length >= MAX_ACTIVE) return { ok: false, error: "queue_full", status: 429 };
+  if (!name) return fail("name_required", 400);
+  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 30) return fail("bad_party_size", 400);
+  if (phone && !/^[+\d][\d\s-]{5,19}$/.test(phone)) return fail("bad_phone", 400);
 
   const section = r.sections.find((s) => s.id === input.sectionId) ?? r.sections[0];
-  const entry: Entry = {
-    id: randomUUID(),
-    token: randomBytes(12).toString("base64url"),
-    restaurantId: r.id,
-    ticketNumber: r.nextTicket++,
-    name,
-    partySize,
-    sectionId: section?.id ?? "",
-    lang: isLocale(input.lang) ? input.lang : "en",
-    phone,
-    source,
-    status: "waiting",
-    onTheWay: false,
-    joinedAt: Date.now(),
-    notifiedAt: null,
-    notifyCount: 0,
-    closedAt: null,
-  };
-  db().entries.push(entry);
-  persist();
-  emitChange(r.id);
-  return { ok: true, value: entry };
+  const { data, error } = await adminClient()
+    .rpc("tp_join", {
+      p_restaurant_id: r.id,
+      p_name: name,
+      p_party_size: partySize,
+      p_section_id: section?.id ?? "",
+      p_lang: isLocale(input.lang) ? input.lang : "en",
+      p_phone: phone,
+      p_source: source,
+      p_max_active: MAX_ACTIVE,
+    })
+    .single();
+  if (error) {
+    const e = dbError(error.message);
+    return fail(e.error, e.status);
+  }
+  await broadcastChange(r.id);
+  return { ok: true, value: toEntry(data as EntryRow) };
 }
 
-export function hostAction(r: Restaurant, entryId: string, action: HostAction): Result<Entry> {
-  const e = db().entries.find((x) => x.id === entryId && x.restaurantId === r.id);
-  if (!e || !isActive(e)) return { ok: false, error: "not_found", status: 404 };
-  const now = Date.now();
+export async function hostAction(r: Restaurant, entryId: string, action: HostAction): Promise<Result<{ ticketNumber: number }>> {
+  if (!/^[0-9a-f-]{36}$/i.test(entryId)) return fail("not_found", 404);
+  let ticketNumber: number;
 
   if (action === "notify") {
-    // Only the first buzz counts against the free plan. Buzz again restarts the countdown.
-    if (e.status === "waiting") {
-      rollPeriod(r);
-      if (r.plan === "free" && r.alertsUsed >= FREE_LIMIT) return { ok: false, error: "limit_reached", status: 402 };
-      if (r.plan === "free") r.alertsUsed++;
-      e.status = "notified";
-      r.nowServing = Math.max(r.nowServing, e.ticketNumber);
+    const { data, error } = await adminClient()
+      .rpc("tp_notify", { p_restaurant_id: r.id, p_entry_id: entryId, p_free_limit: FREE_LIMIT })
+      .single();
+    if (error) {
+      const e = dbError(error.message);
+      return fail(e.error, e.status);
     }
-    e.notifiedAt = now;
-    e.notifyCount++;
+    ticketNumber = (data as EntryRow).ticket_number;
   } else {
-    e.status = action === "seat" ? "seated" : "no_show";
-    e.closedAt = now;
+    const { data, error } = await adminClient()
+      .from("entries")
+      .update({ status: action === "seat" ? "seated" : "no_show", closed_at: new Date().toISOString() })
+      .eq("id", entryId)
+      .eq("restaurant_id", r.id)
+      .in("status", ACTIVE)
+      .select("ticket_number")
+      .maybeSingle();
+    if (error) {
+      const e = dbError(error.message);
+      return fail(e.error, e.status);
+    }
+    if (!data) return fail("not_found", 404);
+    ticketNumber = (data as { ticket_number: number }).ticket_number;
   }
-  persist();
-  emitChange(r.id);
-  return { ok: true, value: e };
+
+  await broadcastChange(r.id);
+  return { ok: true, value: { ticketNumber } };
 }
 
-export function guestAction(token: string, action: GuestAction): Result {
-  const e = entryByToken(token);
-  if (!e || !isActive(e)) return { ok: false, error: "not_found", status: 404 };
-  if (action === "on_way") {
-    if (e.status !== "notified") return { ok: false, error: "not_notified", status: 409 };
-    e.onTheWay = true;
-  } else {
-    e.status = "left";
-    e.closedAt = Date.now();
+export async function guestAction(token: string, action: GuestAction): Promise<Result> {
+  const e = await entryByToken(token);
+  if (!e || (e.status !== "waiting" && e.status !== "notified")) return fail("not_found", 404);
+  if (action === "on_way" && e.status !== "notified") return fail("not_notified", 409);
+
+  const patch = action === "on_way" ? { on_the_way: true } : { status: "left", closed_at: new Date().toISOString() };
+  const { data, error } = await adminClient()
+    .from("entries")
+    .update(patch)
+    .eq("id", e.id)
+    .in("status", action === "on_way" ? ["notified"] : ACTIVE)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    const d = dbError(error.message);
+    return fail(d.error, d.status);
   }
-  persist();
-  emitChange(e.restaurantId);
+  if (!data) return fail("not_found", 404);
+  await broadcastChange(e.restaurantId);
   return { ok: true, value: undefined };
 }
 
@@ -243,12 +395,10 @@ const clampInt = (v: unknown, min: number, max: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
 };
 
-export function updateSettings(r: Restaurant, input: SettingsInput): Result<Restaurant> {
+export async function updateSettings(r: Restaurant, input: SettingsInput): Promise<Result> {
   const name = str(input.name);
-  if (!name) return { ok: false, error: "name_required", status: 400 };
-  r.name = name;
-  r.nameAr = str(input.nameAr);
-  r.nameUr = str(input.nameUr);
+  if (!name) return fail("name_required", 400);
+  const patch: Record<string, unknown> = { name, name_ar: str(input.nameAr), name_ur: str(input.nameUr) };
 
   if (Array.isArray(input.sections)) {
     const sections: Section[] = [];
@@ -256,15 +406,62 @@ export function updateSettings(r: Restaurant, input: SettingsInput): Result<Rest
       const s = (raw ?? {}) as Record<string, unknown>;
       const en = str(s.en, 40);
       if (!en) continue;
-      const id = typeof s.id === "string" && /^[a-z0-9-]{1,40}$/.test(s.id) ? s.id : randomUUID().slice(0, 8);
+      const id = typeof s.id === "string" && /^[a-z0-9-]{1,40}$/.test(s.id) ? s.id : `s-${crypto.randomUUID().slice(0, 8)}`;
       sections.push({ id, en, ar: str(s.ar, 40) || en, ur: str(s.ur, 40) || en });
     }
-    if (!sections.length) return { ok: false, error: "section_required", status: 400 };
-    r.sections = sections;
+    if (!sections.length) return fail("section_required", 400);
+    patch.sections = sections;
   }
-  r.gracePeriodMin = clampInt(input.gracePeriodMin, 1, 30) ?? r.gracePeriodMin;
-  r.minutesPerParty = clampInt(input.minutesPerParty, 1, 60) ?? r.minutesPerParty;
-  persist();
-  emitChange(r.id);
-  return { ok: true, value: r };
+  const grace = clampInt(input.gracePeriodMin, 1, 30);
+  const turn = clampInt(input.minutesPerParty, 1, 60);
+  if (grace !== null) patch.grace_period_min = grace;
+  if (turn !== null) patch.minutes_per_party = turn;
+
+  const { error } = await adminClient().from("restaurants").update(patch).eq("id", r.id);
+  if (error) {
+    const e = dbError(error.message);
+    return fail(e.error, e.status);
+  }
+  await broadcastChange(r.id);
+  return { ok: true, value: undefined };
+}
+
+/** Test-mode plan switch. Replace with the payment gateway's webhook. */
+export async function setPlan(r: Restaurant, plan: Plan): Promise<Result> {
+  const { error } = await adminClient().from("restaurants").update({ plan }).eq("id", r.id);
+  if (error) {
+    const e = dbError(error.message);
+    return fail(e.error, e.status);
+  }
+  await broadcastChange(r.id);
+  return { ok: true, value: undefined };
+}
+
+/** Creates the restaurant and owner row for a new Supabase Auth user. */
+export async function createRestaurantForUser(input: {
+  userId: string;
+  ownerName: string;
+  restaurantName: string;
+  country: Country;
+}): Promise<Result<Restaurant>> {
+  const baseSlug = input.restaurantName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const { data, error } = await adminClient()
+    .rpc("tp_create_restaurant", {
+      p_user_id: input.userId,
+      p_owner_name: input.ownerName,
+      p_restaurant_name: input.restaurantName,
+      p_country: input.country,
+      p_base_slug: baseSlug,
+    })
+    .single();
+  if (error) {
+    const e = dbError(error.message);
+    return fail(e.error, e.status);
+  }
+  return { ok: true, value: toRestaurant(data as RestaurantRow) };
 }

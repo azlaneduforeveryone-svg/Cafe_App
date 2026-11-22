@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   return (
     <LocaleRoot locale={locale}>
       <HostTopBar t={t} locale={locale} restaurant={restaurant} active="queue" />
-      <HostDashboard t={t} locale={locale} initial={hostSnapshot(restaurant)} />
+      <HostDashboard t={t} locale={locale} initial={await hostSnapshot(restaurant)} />
     </LocaleRoot>
   );
 }

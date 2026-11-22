@@ -1,36 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { browserClient } from "@/lib/supabase/browser";
+
+const POLL_MS = 20_000;
 
 /**
- * Subscribes to a Server-Sent Events stream. The browser reconnects by itself
- * if the connection drops; `connected` lets the UI show a "Reconnecting" hint.
- * `clockOffset` corrects countdowns when the phone's clock is wrong.
+ * Keeps a snapshot fresh.
+ *  1. Listens on the restaurant's Supabase Realtime channel for "change" pings.
+ *  2. On each ping, reloads the snapshot from our own API (the ping has no data).
+ *  3. Also reloads every 20 seconds and when the phone wakes up, in case a ping was missed.
+ * `gone` turns true when the API answers 401/404 (logged out, or ticket no longer exists).
  */
-export function useLive<T extends { serverNow: number }>(url: string, initial: T) {
+export function useLive<T extends { serverNow: number; channel: string }>(snapshotUrl: string, initial: T) {
   const [data, setData] = useState<T>(initial);
   const [connected, setConnected] = useState(true);
   const [gone, setGone] = useState(false);
   const [clockOffset, setClockOffset] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(snapshotUrl, { cache: "no-store" });
+      if (res.status === 401 || res.status === 404) {
+        setGone(true);
+        return;
+      }
+      if (!res.ok) return;
+      const next = (await res.json()) as T;
+      setClockOffset(next.serverNow - Date.now());
+      setData(next);
+    } catch {
+      setConnected(false);
+    }
+  }, [snapshotUrl]);
+
+  // Several pings in a row (e.g. two quick taps) cause one reload.
+  const scheduleRefresh = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void refresh(), 150);
+  }, [refresh]);
 
   useEffect(() => {
-    const es = new EventSource(url);
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.onmessage = (ev) => {
-      const next = JSON.parse(ev.data) as T;
-      setClockOffset(next.serverNow - Date.now());
-      setConnected(true);
-      setData(next);
-    };
-    es.addEventListener("gone", () => {
-      setGone(true);
-      es.close();
-    });
-    return () => es.close();
-  }, [url]);
+    const supabase = browserClient();
+    const channel = supabase
+      ?.channel(`tp:${initial.channel}`)
+      .on("broadcast", { event: "change" }, scheduleRefresh)
+      .subscribe((status) => {
+        setConnected(status === "SUBSCRIBED");
+        // Catch up on anything missed while disconnected.
+        if (status === "SUBSCRIBED") scheduleRefresh();
+      });
 
-  return { data, connected, gone, clockOffset };
+    const poll = setInterval(scheduleRefresh, POLL_MS);
+    const onVisible = () => document.visibilityState === "visible" && scheduleRefresh();
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (timer.current) clearTimeout(timer.current);
+      if (supabase && channel) void supabase.removeChannel(channel);
+    };
+  }, [initial.channel, scheduleRefresh]);
+
+  return { data, connected, gone, clockOffset, refresh };
 }
 
 /** Re-renders every second, for timers. Returns server-adjusted now. */

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Bell, Crown, Footprints, MessageSquare, Phone, Plus, QrCode, Users } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { useLive, useNow } from "@/components/useLive";
@@ -13,7 +14,7 @@ import type { HostAction, HostEntry, HostSnapshot, Locale } from "@/lib/types";
 const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ember";
 
 export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale; initial: HostSnapshot }) {
-  const { data, connected, clockOffset } = useLive("/api/host/stream", initial);
+  const { data, connected, gone, clockOffset, refresh } = useLive("/api/host/snapshot", initial);
   const now = useNow(clockOffset);
   const { restaurant: r, entries, stats } = data;
 
@@ -21,6 +22,12 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
   const [pending, setPending] = useState<string | null>(null);
   const [walkIn, setWalkIn] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
+
+  const router = useRouter();
+  // Logged out (or session expired): back to the login page.
+  useEffect(() => {
+    if (gone) router.replace("/login");
+  }, [gone, router]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -42,6 +49,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
         showToast(t.errorGeneric);
       } else {
         if (action === "notify") playChime();
+        void refresh();
         showToast(fmt(action === "notify" ? t.toastBuzzed : action === "seat" ? t.toastSeated : t.toastNoShow, { n: e.ticketNumber }));
       }
     } catch {
@@ -260,6 +268,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
           onClose={() => setWalkIn(false)}
           onAdded={(n, name) => {
             setWalkIn(false);
+            void refresh();
             showToast(fmt(t.toastAdded, { n, name }));
           }}
         />

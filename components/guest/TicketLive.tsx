@@ -15,7 +15,7 @@ type WakeLockLike = { release: () => Promise<void> };
 type NavWithWake = Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockLike> } };
 
 export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Locale; token: string; initial: TicketSnapshot }) {
-  const { data, connected, clockOffset } = useLive(`/api/ticket/${token}/stream`, initial);
+  const { data, connected, clockOffset, refresh } = useLive(`/api/ticket/${token}`, initial);
   const now = useNow(clockOffset);
   const { entry: e, restaurant: r } = data;
   const slug = r.slug;
@@ -81,6 +81,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
   async function send(action: "on_way" | "leave") {
     setBusy(true);
     await fetch(`/api/ticket/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }).catch(() => null);
+    await refresh();
     setBusy(false);
     setConfirmLeave(false);
   }

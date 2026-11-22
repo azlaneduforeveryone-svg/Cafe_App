@@ -9,10 +9,23 @@ import type { Country } from "@/lib/types";
 const input =
   "w-full px-3.5 py-2.5 rounded-xl bg-white border border-line text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ember";
 
-export function AuthForm({ mode, t, defaultCountry, demo }: { mode: "login" | "signup"; t: Dict; defaultCountry: Country; demo?: { email: string; password: string } }) {
+export function AuthForm({
+  mode,
+  t,
+  defaultCountry,
+  demo,
+  initialError,
+}: {
+  mode: "login" | "signup";
+  t: Dict;
+  defaultCountry: Country;
+  demo?: { email: string; password: string };
+  initialError?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,17 +38,47 @@ export function AuthForm({ mode, t, defaultCountry, demo }: { mode: "login" | "s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const out = (await res.json().catch(() => ({}))) as { error?: string; needsConfirm?: boolean };
+      if (res.ok && out.needsConfirm) {
+        setConfirmEmail(String(body.email ?? ""));
+        setBusy(false);
+        return;
+      }
       if (res.ok) {
         router.push("/dashboard");
         router.refresh();
         return;
       }
-      const { error: code } = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(code === "invalid" ? t.errInvalid : code === "exists" ? t.errExists : code === "fields" ? t.errFields : t.errorGeneric);
+      const code = out.error;
+      setError(
+        code === "invalid"
+          ? t.errInvalid
+          : code === "exists"
+            ? t.errExists
+            : code === "fields"
+              ? t.errFields
+              : code === "not_confirmed"
+                ? t.errNotConfirmed
+                : code === "rate_limited"
+                  ? t.errRateLimit
+                  : t.errorGeneric,
+      );
     } catch {
       setError(t.errorGeneric);
     }
     setBusy(false);
+  }
+
+  if (confirmEmail) {
+    return (
+      <div role="status" className="space-y-3 text-center">
+        <h2 className="font-extrabold text-lg">{t.checkEmailTitle}</h2>
+        <p className="text-sm text-stone-600">{t.checkEmailBody.replace("{email}", confirmEmail)}</p>
+        <Link href="/login" className="inline-block mt-2 font-bold text-ember hover:underline text-sm">
+          {t.backToLogin}
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -71,6 +114,14 @@ export function AuthForm({ mode, t, defaultCountry, demo }: { mode: "login" | "s
           className={input}
         />
       </Field>
+
+      {mode === "login" && (
+        <p className="text-end -mt-2">
+          <Link href="/forgot-password" className="text-xs font-bold text-ember hover:underline">
+            {t.forgotPassword}
+          </Link>
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">

@@ -7,7 +7,7 @@ import { ticketSnapshot } from "@/lib/queue";
 
 export default async function TicketPage({ params }: { params: Promise<{ slug: string; token: string }> }) {
   const { slug, token } = await params;
-  const snap = ticketSnapshot(token);
+  const snap = await ticketSnapshot(token);
   if (!snap || snap.restaurant.slug !== slug) notFound();
   const locale = await guestLocale(snap.restaurant.country);
   return (

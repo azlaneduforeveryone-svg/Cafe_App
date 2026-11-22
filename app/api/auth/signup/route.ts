@@ -1,23 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { db, persist } from "@/lib/db";
-import { hashPassword } from "@/lib/password";
-import { setSession } from "@/lib/session";
+import { createClient } from "@/lib/supabase/server";
+import { adminClient } from "@/lib/supabase/admin";
 import { fail, json, readBody } from "@/lib/api";
-import type { Restaurant } from "@/lib/types";
-
-function makeSlug(name: string) {
-  const base =
-    name
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "restaurant";
-  const taken = new Set(db().restaurants.map((r) => r.slug));
-  let slug = base;
-  while (taken.has(slug)) slug = `${base}-${Math.random().toString(36).slice(2, 6)}`;
-  return slug;
-}
+import { siteOrigin } from "@/lib/locale";
+import { createRestaurantForUser } from "@/lib/queue";
 
 export async function POST(req: Request) {
   const b = await readBody(req);
@@ -26,46 +11,39 @@ export async function POST(req: Request) {
   const password = typeof b.password === "string" ? b.password : "";
   const restaurantName = typeof b.restaurantName === "string" ? b.restaurantName.trim().slice(0, 80) : "";
   const country = b.country === "SA" || b.country === "PK" ? b.country : null;
-
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || !restaurantName || !country) {
     return fail("fields", 400);
   }
-  const data = db();
-  if (data.staff.some((s) => s.email === email)) return fail("exists", 409);
 
-  const d = new Date();
-  const restaurant: Restaurant = {
-    id: randomUUID(),
-    slug: makeSlug(restaurantName),
-    name: restaurantName,
-    nameAr: "",
-    nameUr: "",
-    country,
-    sections: [
-      { id: "main", en: "Main Hall", ar: "الصالة الرئيسية", ur: "مین ہال" },
-      { id: "family", en: "Family Section", ar: "قسم العائلات", ur: "فیملی سیکشن" },
-    ],
-    gracePeriodMin: 5,
-    minutesPerParty: 6,
-    plan: "free",
-    alertsUsed: 0,
-    alertsPeriod: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
-    nextTicket: 1,
-    nowServing: 0,
-    createdAt: Date.now(),
-  };
-  const staffId = randomUUID();
-  data.restaurants.push(restaurant);
-  data.staff.push({
-    id: staffId,
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
     email,
-    name,
-    passwordHash: hashPassword(password),
-    restaurantId: restaurant.id,
-    role: "owner",
-    createdAt: Date.now(),
+    password,
+    options: {
+      emailRedirectTo: `${await siteOrigin()}/auth/confirm?next=/dashboard`,
+      data: { name },
+    },
   });
-  persist();
-  await setSession(staffId);
-  return json({ ok: true });
+  if (error) {
+    if (error.status === 429) return fail("rate_limited", 429);
+    if (/already|registered|exists/i.test(error.message)) return fail("exists", 409);
+    if (/password/i.test(error.message)) return fail("fields", 400);
+    console.error("[tablepulse] signup failed:", error.message);
+    return fail("server_error", 500);
+  }
+  // With email confirmation on, Supabase hides existing accounts by returning
+  // a user with no identities instead of an error.
+  const user = data.user;
+  if (!user || (Array.isArray(user.identities) && user.identities.length === 0)) return fail("exists", 409);
+
+  const created = await createRestaurantForUser({ userId: user.id, ownerName: name, restaurantName, country });
+  if (!created.ok) {
+    // Don't leave a login without a restaurant behind.
+    await supabase.auth.signOut().catch(() => {});
+    await adminClient().auth.admin.deleteUser(user.id).catch(() => {});
+    return fail(created.error, created.status);
+  }
+
+  // No session means Supabase wants the email confirmed first.
+  return json({ ok: true, needsConfirm: !data.session });
 }

@@ -4,18 +4,17 @@ import { Brand } from "@/components/Brand";
 import { LangSwitch } from "@/components/LangSwitch";
 import { LocaleRoot } from "@/components/LocaleRoot";
 import { getStaff } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { fmt } from "@/lib/format";
 import { dict } from "@/lib/i18n";
 import { HOST_COOKIE, hostLocale } from "@/lib/locale";
-import { FREE_LIMIT } from "@/lib/queue";
-import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SLUG } from "@/lib/seed";
+import { FREE_LIMIT, getRestaurantBySlug } from "@/lib/queue";
+import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SLUG, showDemoLogin } from "@/lib/demo";
 
 export default async function Landing() {
   const locale = await hostLocale();
   const t = dict(locale);
   const staff = await getStaff();
-  const hasDemo = db().restaurants.some((r) => r.slug === DEMO_SLUG);
+  const hasDemo = (await getRestaurantBySlug(DEMO_SLUG).catch(() => null)) !== null;
 
   const steps = [
     { Icon: QrCode, title: t.how1Title, body: t.how1Body },
@@ -77,7 +76,7 @@ export default async function Landing() {
                 </Link>
               )}
             </div>
-            {hasDemo && (
+            {hasDemo && showDemoLogin() && (
               <p className="text-xs text-stone-500">
                 {fmt(t.demoNote, { email: DEMO_EMAIL, password: DEMO_PASSWORD })}
               </p>
