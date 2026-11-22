@@ -2,6 +2,8 @@ import "server-only";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
+import { publicUrl } from "./media";
+import { cancelOpenOrder, currencyOf, hasMenu, orderForEntry, ordersForEntries } from "./menu";
 import type {
   Country,
   Entry,
@@ -42,6 +44,7 @@ interface RestaurantRow {
   next_ticket: number;
   now_serving: number;
   created_at: string;
+  logo_path: string | null;
 }
 
 interface EntryRow {
@@ -82,6 +85,7 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     nextTicket: row.next_ticket,
     nowServing: row.now_serving,
     createdAt: Date.parse(row.created_at),
+    logoPath: row.logo_path ?? null,
   };
 }
 
@@ -178,6 +182,7 @@ export function toPublic(r: Restaurant): PublicRestaurant {
     country: r.country,
     sections: r.sections,
     gracePeriodMin: r.gracePeriodMin,
+    logoUrl: publicUrl(r.logoPath),
   };
 }
 
@@ -197,6 +202,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       .eq("restaurant_id", r.id)
       .gte("closed_at", since),
   ]);
+  const orders = await ordersForEntries(entries.map((e) => e.id));
   const closedToday = (closed.data ?? []) as Pick<EntryRow, "status" | "joined_at" | "notified_at" | "closed_at">[];
   const seated = closedToday.filter((e) => e.status === "seated");
   const avgWaitToday = seated.length
@@ -215,6 +221,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       freeLimit: FREE_LIMIT,
       minutesPerParty: r.minutesPerParty,
       nowServing: r.nowServing,
+      currency: currencyOf(r),
     },
     entries: entries.map((e) => ({
       id: e.id,
@@ -229,6 +236,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       onTheWay: e.onTheWay,
       joinedAt: e.joinedAt,
       notifiedAt: e.notifiedAt,
+      order: orders.get(e.id) ?? null,
     })),
     stats: {
       seatedToday: seated.length,
@@ -238,7 +246,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
   };
 }
 
-async function entryByToken(token: string): Promise<Entry | null> {
+export async function entryByToken(token: string): Promise<Entry | null> {
   if (!/^[0-9a-f]{32}$/.test(token)) return null;
   const { data } = await adminClient().from("entries").select("*").eq("token", token).maybeSingle();
   return data ? toEntry(data as EntryRow) : null;
@@ -280,6 +288,9 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
     ahead: Math.max(0, position - 1),
     eta: position ? etaFor(r, position) : 0,
     nowServing: r.nowServing,
+    currency: currencyOf(r),
+    order: await orderForEntry(e.id),
+    hasMenu: await hasMenu(r.id),
   };
 }
 
@@ -352,6 +363,8 @@ export async function hostAction(r: Restaurant, entryId: string, action: HostAct
     }
     if (!data) return fail("not_found", 404);
     ticketNumber = (data as { ticket_number: number }).ticket_number;
+    // A no-show's pre-order is dropped unless the kitchen already accepted it.
+    if (action === "no_show") await cancelOpenOrder(entryId);
   }
 
   await broadcastChange(r.id);
@@ -376,6 +389,7 @@ export async function guestAction(token: string, action: GuestAction): Promise<R
     return fail(d.error, d.status);
   }
   if (!data) return fail("not_found", 404);
+  if (action === "leave") await cancelOpenOrder(e.id);
   await broadcastChange(e.restaurantId);
   return { ok: true, value: undefined };
 }

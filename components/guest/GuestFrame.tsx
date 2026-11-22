@@ -32,9 +32,14 @@ export function GuestFrame({
       >
         <header className={`px-5 pt-4 pb-3 flex items-center justify-between gap-3 border-b ${ready ? "border-emerald-600/60 bg-emerald-900/30" : "border-line bg-white"}`}>
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-9 h-9 rounded-full bg-ember text-white flex items-center justify-center shadow-sm shrink-0">
-              <Utensils className="w-4 h-4" aria-hidden />
-            </span>
+            {restaurant.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={restaurant.logoUrl} alt="" className="w-10 h-10 rounded-xl object-contain bg-white border border-line shrink-0" />
+            ) : (
+              <span className="w-9 h-9 rounded-full bg-ember text-white flex items-center justify-center shadow-sm shrink-0">
+                <Utensils className="w-4 h-4" aria-hidden />
+              </span>
+            )}
             <div className="min-w-0">
               <p className="display font-bold text-sm leading-tight truncate">{restaurantName(restaurant, locale)}</p>
               {typeof nowServing === "number" && nowServing > 0 && (

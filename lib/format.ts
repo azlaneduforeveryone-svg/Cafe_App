@@ -1,5 +1,14 @@
 import type { Locale, PublicRestaurant, Section } from "./types";
 
+const SUFFIX: Record<Locale, string> = { en: "En", ar: "Ar", ur: "Ur" };
+
+/** Picks a translated field, e.g. tr(item, "name", "ar") reads item.nameAr (falls back to English). */
+export function tr(o: object, base: string, l: Locale): string {
+  const rec = o as Record<string, unknown>;
+  return String(rec[base + SUFFIX[l]] || rec[base + "En"] || "");
+}
+
+
 export function fmt(template: string, vars: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ""));
 }

@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, Crown, Footprints, MessageSquare, Phone, Plus, QrCode, Users } from "lucide-react";
+import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
-import { fmt, mmss, sectionName } from "@/lib/format";
+import { fmt, mmss, sectionName, tr } from "@/lib/format";
+import { money } from "@/lib/pricing";
 import { LOCALES, LOCALE_LABELS, type Dict } from "@/lib/i18n";
-import type { HostAction, HostEntry, HostSnapshot, Locale } from "@/lib/types";
+import type { HostAction, HostEntry, HostSnapshot, Locale, Order } from "@/lib/types";
 
 const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ember";
 
@@ -56,6 +57,17 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
       showToast(t.errorGeneric);
     }
     setPending(null);
+  }
+
+  async function orderAct(e: HostEntry, action: "accept" | "cancel") {
+    if (!e.order) return;
+    const res = await fetch(`/api/host/orders/${e.order.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    }).catch(() => null);
+    showToast(res?.ok ? fmt(action === "accept" ? t.toastOrderAccepted : t.toastOrderCancelled, { n: e.ticketNumber }) : t.errorGeneric);
+    void refresh();
   }
 
   const totalGuests = entries.reduce((s, e) => s + e.partySize, 0);
@@ -126,10 +138,11 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                     return (
                       <li
                         key={e.id}
-                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        className={`p-3.5 rounded-2xl border transition-all ${
                           overdue ? "bg-red-50/70 border-red-300" : notified ? "bg-emerald-50/80 border-emerald-400 shadow-sm" : "bg-white border-line"
                         }`}
                       >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div
                             className={`w-12 h-12 rounded-xl font-mono font-extrabold text-sm flex items-center justify-center shrink-0 ${
@@ -160,13 +173,13 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                               <span>{sectionName(r.sections, e.sectionId, locale)}</span>
                               <span aria-hidden>•</span>
                               <span>
-                                {t.waited} <span className="font-mono font-bold text-stone-700 ltr">{mmss((now - e.joinedAt) / 1000)}</span>
+                                {t.waited} <span className="font-mono font-bold text-stone-700 ltr" suppressHydrationWarning>{mmss((now - e.joinedAt) / 1000)}</span>
                               </span>
                               {notified && (
                                 <>
                                   <span aria-hidden>•</span>
                                   <span className={overdue ? "text-red-700 font-bold" : "text-emerald-700 font-bold"}>
-                                    {t.graceLeft} <span className="font-mono ltr">{mmss(left)}</span>
+                                    {t.graceLeft} <span className="font-mono ltr" suppressHydrationWarning>{mmss(left)}</span>
                                   </span>
                                 </>
                               )}
@@ -209,6 +222,16 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                             {t.noShow}
                           </button>
                         </div>
+                        </div>
+                        {e.order && (
+                          <OrderPanel
+                            t={t}
+                            locale={locale}
+                            order={e.order}
+                            currency={r.currency}
+                            onAction={(action) => orderAct(e, action)}
+                          />
+                        )}
                       </li>
                     );
                   })}
@@ -401,5 +424,65 @@ function WalkInModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+function OrderPanel({
+  t,
+  locale,
+  order,
+  currency,
+  onAction,
+}: {
+  t: Dict;
+  locale: Locale;
+  order: Order;
+  currency: string;
+  onAction: (action: "accept" | "cancel") => void;
+}) {
+  const [open, setOpen] = useState(order.status === "submitted");
+  const count = order.items.reduce((n, l) => n + l.qty, 0);
+  const accepted = order.status === "accepted";
+  return (
+    <div className={`mt-3 rounded-xl border ${accepted ? "border-emerald-300 bg-emerald-50/60" : "border-gold/60 bg-amber-50/70"}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full px-3 py-2 flex items-center justify-between gap-2 text-start">
+        <span className="flex items-center gap-2 text-xs font-extrabold text-ink">
+          <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
+          {t.preOrder}
+          <span className="font-semibold text-stone-600">{fmt(t.preOrderSummary, { n: count, total: money(order.total, currency) })}</span>
+          {accepted && <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold">{t.orderAccepted}</span>}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-stone-500 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          <ul className="text-xs space-y-1">
+            {order.items.map((l) => (
+              <li key={l.id} className="flex justify-between gap-3">
+                <span>
+                  <span className="font-extrabold ltr">{l.qty}×</span> {tr(l, "name", locale)}
+                </span>
+                <span className="font-semibold text-stone-600 ltr">{money(l.price * l.qty, currency)}</span>
+              </li>
+            ))}
+          </ul>
+          {order.note && (
+            <p className="text-xs bg-white/70 rounded-lg px-2 py-1.5 border border-line">
+              <span className="font-bold">{t.orderNoteLabel}:</span> {order.note}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => onAction("cancel")} className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
+              {t.cancelOrder}
+            </button>
+            {!accepted && (
+              <button type="button" onClick={() => onAction("accept")} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
+                {t.acceptOrder}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

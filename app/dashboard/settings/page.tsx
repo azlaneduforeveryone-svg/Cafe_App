@@ -1,7 +1,9 @@
 import QRCode from "qrcode";
 import { HostTopBar } from "@/components/HostTopBar";
 import { LocaleRoot } from "@/components/LocaleRoot";
+import { LogoCard } from "@/components/host/LogoCard";
 import { PrintButton } from "@/components/host/PrintButton";
+import { publicUrl } from "@/lib/media";
 import { SettingsForm } from "@/components/host/SettingsForm";
 import { requireStaff } from "@/lib/auth";
 import { restaurantName } from "@/lib/format";
@@ -23,6 +25,9 @@ export default async function SettingsPage() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 grid gap-6 lg:grid-cols-12 items-start">
         <div className="lg:col-span-7 no-print">
           <h1 className="display text-2xl font-bold mb-4">{t.settingsTitle}</h1>
+          <div className="mb-5">
+            <LogoCard t={t} initialUrl={publicUrl(r.logoPath)} />
+          </div>
           <SettingsForm
             t={t}
             initial={{

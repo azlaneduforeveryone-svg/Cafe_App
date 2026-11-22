@@ -29,5 +29,5 @@ export const PRICING: Record<
 };
 
 export function money(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString("en-US")}`;
+  return `${currency} ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }

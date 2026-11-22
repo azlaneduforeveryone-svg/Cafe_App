@@ -3,7 +3,21 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
-export function Modal({ title, onClose, closeLabel, children, tone = "default" }: { title: string; onClose: () => void; closeLabel: string; children: React.ReactNode; tone?: "default" | "gold" }) {
+export function Modal({
+  title,
+  onClose,
+  closeLabel,
+  children,
+  tone = "default",
+  wide = false,
+}: {
+  title: string;
+  onClose: () => void;
+  closeLabel: string;
+  children: React.ReactNode;
+  tone?: "default" | "gold";
+  wide?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
 
@@ -27,7 +41,7 @@ export function Modal({ title, onClose, closeLabel, children, tone = "default" }
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 ${tone === "gold" ? "border-2 border-gold" : "border border-line"}`}
+        className={`bg-white rounded-3xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto ${wide ? "max-w-2xl" : "max-w-md"} ${tone === "gold" ? "border-2 border-gold" : "border border-line"}`}
       >
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-extrabold text-ink">{title}</h2>

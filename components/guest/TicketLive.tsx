@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, CheckCircle2, Clock, Footprints, Smartphone, Utensils, Volume2 } from "lucide-react";
+import { Bell, BookOpen, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
+import { MenuSheet } from "./MenuSheet";
+import { money } from "@/lib/pricing";
 import { GuestFrame } from "./GuestFrame";
 import { ticketKey } from "./JoinForm";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, restaurantName, sectionName } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
-import type { Locale, TicketSnapshot } from "@/lib/types";
+import type { Locale, Order, TicketSnapshot } from "@/lib/types";
 
 type WakeLockLike = { release: () => Promise<void> };
 type NavWithWake = Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockLike> } };
@@ -22,6 +24,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
 
   const [alertsOn, setAlertsOn] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const lastBuzz = useRef(initial.entry.notifyCount);
   const wakeLock = useRef<WakeLockLike | null>(null);
@@ -135,6 +138,20 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
             </dl>
           </div>
 
+          {(data.hasMenu || data.order) && (
+            <OrderCard
+              t={t}
+              order={data.order}
+              currency={data.currency}
+              hasMenu={data.hasMenu}
+              onOpenMenu={() => setShowMenu(true)}
+              onCancel={async () => {
+                await fetch(`/api/ticket/${token}/order`, { method: "DELETE" }).catch(() => null);
+                await refresh();
+              }}
+            />
+          )}
+
           <div className="space-y-2">
             <div className="p-3 rounded-2xl bg-white/80 border border-line text-[11px] text-stone-600 flex items-start gap-2.5">
               <span className="w-2.5 h-2.5 mt-0.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" aria-hidden />
@@ -206,13 +223,19 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
               {left > 0 ? (
                 <>
                   <span className="block text-[10px] uppercase tracking-wider text-emerald-200 font-bold">{t.timeLeft}</span>
-                  <span className="text-3xl font-mono font-extrabold ltr">{mmss(left)}</span>
+                  <span className="text-3xl font-mono font-extrabold ltr" suppressHydrationWarning>{mmss(left)}</span>
                 </>
               ) : (
                 <span className="text-sm font-bold">{t.timeUp}</span>
               )}
             </div>
           </div>
+          {data.order && data.order.status !== "cancelled" && (
+            <p className="mt-4 mx-auto max-w-[260px] text-xs font-bold bg-black/20 rounded-xl px-3 py-2 flex items-center justify-center gap-1.5">
+              <ShoppingBag className="w-3.5 h-3.5" aria-hidden />
+              {data.order.status === "accepted" ? t.statusAccepted : t.statusSubmitted} · <span className="ltr">{money(data.order.total, data.currency)}</span>
+            </p>
+          )}
           <div className="pt-4">
             {e.onTheWay ? (
               <p className="py-3.5 px-4 rounded-2xl bg-white text-go font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg">
@@ -250,6 +273,77 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
           )}
         </div>
       )}
+      {showMenu && (
+        <MenuSheet
+          t={t}
+          locale={locale}
+          token={token}
+          order={data.order}
+          onClose={() => setShowMenu(false)}
+          onSent={() => void refresh()}
+        />
+      )}
     </GuestFrame>
+  );
+}
+
+function OrderCard({
+  t,
+  order,
+  currency,
+  hasMenu,
+  onOpenMenu,
+  onCancel,
+}: {
+  t: Dict;
+  order: Order | null;
+  currency: string;
+  hasMenu: boolean;
+  onOpenMenu: () => void;
+  onCancel: () => void;
+}) {
+  const active = order && order.status !== "cancelled";
+  if (!active) {
+    return (
+      <div className="space-y-1.5">
+        {order?.status === "cancelled" && <p className="text-[11px] font-semibold text-stone-500 text-center">{t.yourOrder}: {t.statusCancelled}</p>}
+        {hasMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="w-full py-3 px-3 rounded-2xl bg-white border-2 border-gold hover:bg-amber-50 text-sm font-extrabold flex items-center justify-center gap-2"
+          >
+            <BookOpen className="w-4 h-4 text-ember" aria-hidden />
+            {t.viewMenu}
+          </button>
+        )}
+      </div>
+    );
+  }
+  const count = order.items.reduce((n, l) => n + l.qty, 0);
+  const accepted = order.status === "accepted";
+  return (
+    <div className={`p-3.5 rounded-2xl border ${accepted ? "bg-emerald-50 border-emerald-300" : "bg-white border-gold"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-extrabold flex items-center gap-1.5">
+          <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
+          {t.yourOrder}
+        </span>
+        <span className="text-xs font-extrabold ltr">{money(order.total, currency)}</span>
+      </div>
+      <p className={`text-xs font-bold mt-1 ${accepted ? "text-emerald-800" : "text-amber-800"}`}>
+        {accepted ? t.statusAccepted : t.statusSubmitted} · {fmt(t.itemsCount, { n: count })}
+      </p>
+      <div className="flex gap-2 mt-2.5">
+        <button type="button" onClick={onOpenMenu} className="flex-1 py-2 rounded-xl bg-ink text-white text-xs font-bold">
+          {accepted ? t.viewMenu : t.editOrder}
+        </button>
+        {!accepted && (
+          <button type="button" onClick={onCancel} className="px-3 py-2 rounded-xl text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
+            {t.cancelPreOrder}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

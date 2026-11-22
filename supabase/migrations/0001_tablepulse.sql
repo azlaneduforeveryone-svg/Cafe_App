@@ -68,6 +68,11 @@ alter table public.restaurants enable row level security;
 alter table public.staff       enable row level security;
 alter table public.entries     enable row level security;
 
+-- Newer Supabase projects don't give API roles table access automatically.
+-- Only the server role gets it; the public roles get nothing (a second lock besides RLS).
+grant select, insert, update, delete on public.restaurants, public.staff, public.entries to service_role;
+revoke all on public.restaurants, public.staff, public.entries from anon, authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Functions (each runs as one transaction, so counters can't race)
 -- ---------------------------------------------------------------------------

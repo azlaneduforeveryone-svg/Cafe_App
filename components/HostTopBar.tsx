@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Crown, LayoutList, Settings, Zap } from "lucide-react";
+import { BookOpen, Crown, LayoutList, Settings, Zap } from "lucide-react";
 import { Brand } from "./Brand";
 import { LangSwitch } from "./LangSwitch";
 import { LogoutButton } from "./LogoutButton";
@@ -9,10 +9,11 @@ import { restaurantName } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Restaurant } from "@/lib/types";
 
-export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "settings" | "plans" }) {
+export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "menu" | "settings" | "plans" }) {
   const alertsUsed = alertsUsedNow(restaurant);
   const nav = [
     { key: "queue", href: "/dashboard", label: t.dashboard, Icon: LayoutList },
+    { key: "menu", href: "/dashboard/menu", label: t.menuNav, Icon: BookOpen },
     { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings },
     { key: "plans", href: "/pricing", label: t.plans, Icon: Crown },
   ] as const;

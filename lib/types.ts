@@ -28,6 +28,7 @@ export interface Restaurant {
   nextTicket: number;
   nowServing: number;
   createdAt: number;
+  logoPath: string | null;
 }
 
 export interface Staff {
@@ -66,6 +67,7 @@ export interface PublicRestaurant {
   country: Country;
   sections: Section[];
   gracePeriodMin: number;
+  logoUrl: string | null;
 }
 
 export interface HostEntry {
@@ -81,6 +83,7 @@ export interface HostEntry {
   onTheWay: boolean;
   joinedAt: number;
   notifiedAt: number | null;
+  order: Order | null;
 }
 
 export interface HostSnapshot {
@@ -92,6 +95,7 @@ export interface HostSnapshot {
     freeLimit: number;
     minutesPerParty: number;
     nowServing: number;
+    currency: string;
   };
   entries: HostEntry[];
   stats: { seatedToday: number; noShowToday: number; avgWaitToday: number | null };
@@ -117,4 +121,59 @@ export interface TicketSnapshot {
   ahead: number;
   eta: number;
   nowServing: number;
+  currency: string;
+  order: Order | null;
+  hasMenu: boolean;
+}
+
+export interface MenuCategory {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  sort: number;
+}
+
+export interface MenuItem {
+  id: string;
+  categoryId: string | null;
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  descEn: string;
+  descAr: string;
+  descUr: string;
+  price: number;
+  compareAtPrice: number | null;
+  isDeal: boolean;
+  imagePath: string | null;
+  imageUrl: string | null;
+  available: boolean;
+  sort: number;
+}
+
+export interface Menu {
+  currency: string;
+  categories: MenuCategory[];
+  items: MenuItem[];
+}
+
+export type OrderStatus = "submitted" | "accepted" | "cancelled";
+
+export interface OrderLine {
+  id: string;
+  qty: number;
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  price: number;
+}
+
+export interface Order {
+  id: string;
+  status: OrderStatus;
+  items: OrderLine[];
+  total: number;
+  note: string;
+  updatedAt: number;
 }

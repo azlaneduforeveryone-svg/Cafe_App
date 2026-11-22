@@ -49,7 +49,9 @@ Dashboard > **Authentication** > **Email Templates** (recommended, so links work
 - **Reset password**, replace the link with:
   `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery">Reset your password</a>`
 
-(`RedirectTo` already contains `?next=...`, which is why the template starts with `&`. If you skip this step, the default templates still work, but only in the same browser that requested the email.)
+(`RedirectTo` already contains `?next=...`, which is why the template starts with `&`.)
+
+**Note:** Supabase only allows editing templates after custom SMTP is set up. Until then, skip this: the default templates work. The email is confirmed as soon as the link is clicked; the link only logs the person in automatically when opened in the same browser they signed up in. Otherwise they land on the login page with a message telling them to log in.
 
 **Email sending:** Supabase's built-in sender is rate-limited to a few emails per hour, which is fine for testing. Before real customers sign up, add your own SMTP provider under **Authentication > Emails > SMTP Settings** (for example Resend, Brevo or Amazon SES).
 
@@ -137,3 +139,22 @@ Commit and push to `main`. Vercel builds automatically. Repeat the checklist on 
 | Email link goes to `/login?error=link` | Redirect URL not in the allow list (step 3), or the link expired / was already used |
 | Logged in but `/dashboard` sends you to `/login` | That user has no row in `staff` (signed up before step 2). Delete the user in Supabase Auth and sign up again |
 | Host updates only every 20 s | Realtime public channels disabled (step 4) |
+
+---
+
+## Menu, deals, pre-orders and logos (added later)
+
+1. Supabase > **SQL Editor** > run `supabase/migrations/0002_menu_orders.sql` (safe to re-run). It adds the menu tables, the pre-order table and function, the logo column, and a public image bucket called `restaurant-media` (2 MB limit, images only).
+2. Check: **Storage** shows the `restaurant-media` bucket marked Public. **Table Editor** shows `menu_categories`, `menu_items`, `orders` with RLS enabled.
+3. Optional: re-run `node --env-file=.env.local scripts/seed-demo.mjs` to give the demo restaurant a sample menu (one deal, three dishes).
+
+Test checklist:
+- [ ] Settings: upload a logo > it shows on the guest join and ticket pages; Remove works
+- [ ] Menu: add a category in all three languages; leaving Arabic or Urdu empty is refused
+- [ ] Menu: add a dish with a phone photo (it uploads quickly, the browser shrinks it), price, and a deal with an original price higher than the price
+- [ ] Menu: Hide a dish > it disappears from the guest menu; Show brings it back
+- [ ] Guest ticket: "View menu and pre-order" > deals first > add items > Review > Send
+- [ ] Host queue shows the pre-order on that guest's row within about a second; Accept locks it (guest can no longer edit)
+- [ ] Guest edits a not-yet-accepted order > host sees the update; guest cancels > it disappears
+- [ ] Mark a guest with a submitted (not accepted) pre-order as No-show > the order is cancelled
+- [ ] Guest menu in Arabic and Urdu shows the right names and reads right to left

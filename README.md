@@ -41,6 +41,9 @@ node --env-file=.env.local scripts/seed-demo.mjs
 - Guest join page and live ticket: chime, Android vibration, screen wake lock, "We're on our way"
 - Free plan metering (150 alerts a month), enforced inside the database so two taps can't go over
 - Each guest picks their own language; the host keeps theirs
+- Menu with photos, categories and deals (all text in English, Arabic and Urdu), editable at `/dashboard/menu`
+- Guest pre-orders from the live ticket; host accepts on the queue screen (pay at the restaurant)
+- Restaurant logo upload (Settings), shown on guest screens
 - Region pricing (SAR / PKR) in `lib/pricing.ts`
 
 ## Not built yet

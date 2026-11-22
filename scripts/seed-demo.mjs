@@ -98,6 +98,62 @@ for (const g of guests) {
   await db.from("entries").update({ joined_at: new Date(Date.now() - g.minsAgo * 60_000).toISOString() }).eq("id", data.id);
 }
 
+// 4. Sample menu (needs 0002_menu_orders.sql). Replaces the demo menu each run.
+const { error: menuCheck } = await db.from("menu_items").select("id").limit(1);
+if (menuCheck) {
+  console.warn("Skipping sample menu (run supabase/migrations/0002_menu_orders.sql first).");
+} else {
+  await db.from("menu_items").delete().eq("restaurant_id", restaurantId);
+  await db.from("menu_categories").delete().eq("restaurant_id", restaurantId);
+  const { data: cats, error: catErr } = await db
+    .from("menu_categories")
+    .insert([
+      { restaurant_id: restaurantId, name_en: "Grill", name_ar: "المشويات", name_ur: "گرل", sort: 0 },
+      { restaurant_id: restaurantId, name_en: "Desserts", name_ar: "الحلويات", name_ur: "میٹھا", sort: 1 },
+    ])
+    .select("id, name_en");
+  if (catErr) die("Could not add sample categories:", catErr);
+  const cat = (name) => cats.find((c) => c.name_en === name)?.id ?? null;
+  const item = (o) => ({
+    restaurant_id: restaurantId,
+    compare_at_price: null,
+    is_deal: false,
+    available: true,
+    ...o,
+  });
+  const { error: itemErr } = await db.from("menu_items").insert([
+    item({
+      category_id: null, sort: 0, is_deal: true, price: 4500, compare_at_price: 5600,
+      name_en: "Family Feast Deal", name_ar: "عرض وليمة العائلة", name_ur: "فیملی فیسٹ ڈیل",
+      desc_en: "Lamb chops, butter chicken, 4 naan and a jug of mint lemonade. Serves 4.",
+      desc_ar: "ريش غنم ودجاج بالزبدة و٤ خبز نان وإبريق ليموناضة بالنعناع. يكفي ٤ أشخاص.",
+      desc_ur: "لیمب چوپس، بٹر چکن، 4 نان اور پودینہ لیمونیڈ کا جگ۔ 4 افراد کے لیے۔",
+    }),
+    item({
+      category_id: cat("Grill"), sort: 1, price: 2850,
+      name_en: "Saffron Charcoal Lamb Chops", name_ar: "ريش غنم مشوية بالزعفران", name_ur: "زعفرانی چارکول لیمب چوپس",
+      desc_en: "24-hour spiced marinade, smoked labneh, pomegranate glaze.",
+      desc_ar: "تتبيلة بهارات ٢٤ ساعة مع لبنة مدخنة ودبس الرمان.",
+      desc_ur: "24 گھنٹے میرینیٹ شدہ چانپیں، اسموکڈ لبنہ اور انار کی چٹنی کے ساتھ۔",
+    }),
+    item({
+      category_id: cat("Grill"), sort: 2, price: 1950,
+      name_en: "Ember Roasted Butter Chicken", name_ar: "دجاج بالزبدة مشوي على الجمر", name_ur: "ایمبر روسٹڈ بٹر چکن",
+      desc_en: "Tomato and fenugreek gravy, served with garlic naan.",
+      desc_ar: "صلصة الطماطم والحلبة، يقدم مع خبز النان بالثوم.",
+      desc_ur: "ٹماٹر اور میتھی کی گریوی، گارلک نان کے ساتھ۔",
+    }),
+    item({
+      category_id: cat("Desserts"), sort: 3, price: 1150,
+      name_en: "Cardamom Pistachio Kunafa", name_ar: "كنافة بالفستق والهيل", name_ur: "الائچی اور پستہ کنافہ",
+      desc_en: "Crisp kataifi pastry, sweet cream, crushed pistachios.",
+      desc_ar: "عجينة كنافة مقرمشة مع قشطة وفستق مطحون.",
+      desc_ur: "کرسپی کنافہ، ملائی اور پسے ہوئے پستے۔",
+    }),
+  ]);
+  if (itemErr) die("Could not add sample dishes:", itemErr);
+}
+
 console.log("Demo ready.");
 console.log(`  Host login: ${EMAIL} / ${PASSWORD}`);
 console.log(`  Guest page: /r/${SLUG}`);

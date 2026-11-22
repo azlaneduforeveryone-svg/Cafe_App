@@ -1,0 +1,10 @@
+import { fail, json, readBody, withStaff } from "@/lib/api";
+import { createItem } from "@/lib/menu";
+
+export async function POST(req: Request) {
+  const body = await readBody(req);
+  return withStaff(async ({ restaurant }) => {
+    const res = await createItem(restaurant, body);
+    return res.ok ? json({ ok: true }) : fail(res.error, res.status);
+  });
+}
