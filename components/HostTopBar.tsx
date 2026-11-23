@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, BookOpen, Crown, LayoutGrid, LayoutList, Settings, Zap } from "lucide-react";
+import { BarChart3, BookOpen, ChefHat, Crown, LayoutGrid, LayoutList, Settings, Zap } from "lucide-react";
 import { Brand } from "./Brand";
 import { LangSwitch } from "./LangSwitch";
 import { LogoutButton } from "./LogoutButton";
@@ -9,11 +9,12 @@ import { restaurantName } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Restaurant } from "@/lib/types";
 
-export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "floor" | "menu" | "reports" | "settings" | "plans" }) {
+export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "floor" | "kitchen" | "menu" | "reports" | "settings" | "plans" }) {
   const alertsUsed = alertsUsedNow(restaurant);
   const nav = [
     { key: "queue", href: "/dashboard", label: t.dashboard, Icon: LayoutList },
     { key: "floor", href: "/dashboard/floor", label: t.floorNav, Icon: LayoutGrid },
+    { key: "kitchen", href: "/dashboard/kitchen", label: t.kitchenNav, Icon: ChefHat },
     { key: "menu", href: "/dashboard/menu", label: t.menuNav, Icon: BookOpen },
     { key: "reports", href: "/dashboard/reports", label: t.reportsNav, Icon: BarChart3 },
     { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings },

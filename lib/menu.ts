@@ -3,7 +3,7 @@ import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { deleteImage, ownsPath, publicUrl } from "./media";
 import { PRICING } from "./pricing";
-import type { MealPeriod, Menu, MenuCategory, MenuItem, Order, OrderLine, OrderStatus, Restaurant } from "./types";
+import { ALLERGENS, SPICE_LEVELS, type Allergen, type MealPeriod, type Menu, type MenuCategory, type MenuItem, type Order, type OrderLine, type OrderStatus, type Portion, type Restaurant, type SpiceLevel, type Station } from "./types";
 
 type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string; status: number };
 const fail = (error: string, status: number) => ({ ok: false as const, error, status });
@@ -26,6 +26,35 @@ const money = (v: unknown) => {
 };
 
 export const currencyOf = (r: Pick<Restaurant, "country">) => PRICING[r.country].currency;
+
+const ID = /^[a-z0-9-]{1,20}$/;
+/** Up to 4 sizes, each with names in 3 languages and its own price. Null = invalid input. */
+function portionsOf(v: unknown): Portion[] | null {
+  if (!Array.isArray(v) || v.length === 0) return [];
+  if (v.length > 4) return null;
+  const out: Portion[] = [];
+  for (const raw of v) {
+    const p = (raw ?? {}) as Record<string, unknown>;
+    const x = { id: str(p.id, 20).toLowerCase(), en: str(p.en, 20), ar: str(p.ar, 20), ur: str(p.ur, 20), price: money(p.price) };
+    if (!ID.test(x.id) || !x.en || !x.ar || !x.ur || x.price === null || out.some((o) => o.id === x.id)) return null;
+    out.push(x as Portion);
+  }
+  return out;
+}
+
+/** The cart a guest sends: [{ id, qty, portion?, spice? }]. Prices are never taken from it. */
+export function cartOf(b: Record<string, unknown>) {
+  const raw = Array.isArray(b.items) ? b.items.slice(0, 60) : [];
+  return raw
+    .map((x) => (x ?? {}) as Record<string, unknown>)
+    .filter((x) => typeof x.id === "string" && UUID.test(x.id))
+    .map((x) => ({
+      id: x.id as string,
+      qty: Math.max(1, Math.min(20, Math.round(Number(x.qty) || 1))),
+      ...(typeof x.portion === "string" && ID.test(x.portion) ? { portion: x.portion } : {}),
+      ...(SPICE_LEVELS.includes(x.spice as SpiceLevel) ? { spice: x.spice as SpiceLevel } : {}),
+    }));
+}
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -57,6 +86,11 @@ interface ItemRow {
   back_at?: string | null;
   days?: number;
   periods?: string[];
+  station?: string;
+  allergens?: string[];
+  spice_levels?: string[];
+  portions?: Portion[];
+  upsell_item_id?: string | null;
   sort: number;
 }
 interface OrderRow {
@@ -65,6 +99,10 @@ interface OrderRow {
   kind?: "pre" | "table";
   round?: number;
   created_at?: string;
+  accepted_at?: string | null;
+  ready_at?: string | null;
+  served_at?: string | null;
+  station_ready?: Record<string, string> | null;
   status: OrderStatus;
   items: OrderLine[];
   total: string | number;
@@ -102,6 +140,11 @@ const toItem = (r: ItemRow, st?: ItemStatus): MenuItem => ({
   periods: r.periods ?? [],
   inStock: st ? st.in_stock : r.available,
   onSchedule: st ? st.on_schedule : true,
+  station: r.station ?? "",
+  allergens: (r.allergens ?? []) as Allergen[],
+  spiceLevels: (r.spice_levels ?? []) as SpiceLevel[],
+  portions: (Array.isArray(r.portions) ? r.portions : []).map((p) => ({ ...p, price: Number(p.price) })),
+  upsellItemId: r.upsell_item_id ?? null,
   sort: r.sort,
 });
 export const toOrder = (r: OrderRow): Order => ({
@@ -114,6 +157,10 @@ export const toOrder = (r: OrderRow): Order => ({
   note: r.note,
   createdAt: Date.parse(r.created_at ?? r.updated_at),
   updatedAt: Date.parse(r.updated_at),
+  acceptedAt: r.accepted_at ? Date.parse(r.accepted_at) : null,
+  readyAt: r.ready_at ? Date.parse(r.ready_at) : null,
+  servedAt: r.served_at ? Date.parse(r.served_at) : null,
+  stationReady: r.station_ready ?? {},
 });
 
 // ---------------------------------------------------------------------------
@@ -145,6 +192,7 @@ export async function getMenu(r: Restaurant, opts: { includeHidden?: boolean } =
   return {
     currency: currencyOf(r),
     mealPeriods: mealPeriodsOf(r),
+    stations: r.stations ?? [],
     categories: (cats.data as CategoryRow[]).map(toCategory),
     items,
   };
@@ -264,6 +312,11 @@ async function itemInput(r: Restaurant, b: Record<string, unknown>) {
     is_deal: b.isDeal === true,
     days: daysOf(b.days),
     periods: periodsOf(r, b.periods),
+    station: typeof b.station === "string" && (r.stations ?? []).some((x) => x.id === b.station) ? b.station : "",
+    allergens: Array.isArray(b.allergens) ? [...new Set(b.allergens.filter((a): a is Allergen => (ALLERGENS as readonly string[]).includes(a as string)))] : [],
+    spice_levels: Array.isArray(b.spiceLevels) ? SPICE_LEVELS.filter((l) => (b.spiceLevels as unknown[]).includes(l)) : [],
+    portions: portionsOf(b.portions),
+    upsell_item_id: typeof b.upsellItemId === "string" && UUID.test(b.upsellItemId) ? b.upsellItemId : null,
     category_id: typeof b.categoryId === "string" && UUID.test(b.categoryId) ? b.categoryId : null,
     image_path: typeof b.imagePath === "string" && b.imagePath ? b.imagePath : null,
   };
@@ -271,6 +324,11 @@ async function itemInput(r: Restaurant, b: Record<string, unknown>) {
   if (v.price === null) return fail("bad_price", 400);
   if (v.compare_at_price !== null && v.compare_at_price <= v.price) return fail("bad_compare_price", 400);
   if (v.image_path && !ownsPath(r.id, v.image_path)) return fail("bad_image", 400);
+  if (v.portions === null) return fail("bad_portions", 400);
+  if (v.upsell_item_id) {
+    const { data } = await adminClient().from("menu_items").select("id").eq("id", v.upsell_item_id).eq("restaurant_id", r.id).maybeSingle();
+    if (!data) v.upsell_item_id = null;
+  }
   if (v.category_id) {
     const { data } = await adminClient().from("menu_categories").select("id").eq("id", v.category_id).eq("restaurant_id", r.id).maybeSingle();
     if (!data) v.category_id = null;
@@ -371,11 +429,7 @@ export async function cancelOpenOrder(entryId: string) {
 }
 
 export async function saveOrder(entry: { id: string; restaurantId: string }, b: Record<string, unknown>): Promise<Result> {
-  const raw = Array.isArray(b.items) ? b.items.slice(0, 60) : [];
-  const items = raw
-    .map((x) => (x ?? {}) as Record<string, unknown>)
-    .filter((x) => typeof x.id === "string" && UUID.test(x.id))
-    .map((x) => ({ id: x.id as string, qty: Math.max(1, Math.min(20, Math.round(Number(x.qty) || 1))) }));
+  const items = cartOf(b);
   if (!items.length) return fail("empty", 400);
   const { error } = await adminClient()
     .rpc("tp_save_order", { p_entry_id: entry.id, p_items: items, p_note: str(b.note, 200) })
@@ -404,7 +458,7 @@ export async function hostOrderAction(r: Restaurant, orderId: string, action: "a
   if (!UUID.test(orderId)) return fail("not_found", 404);
   const { data, error } = await adminClient()
     .from("orders")
-    .update({ status: action === "accept" ? "accepted" : "cancelled", updated_at: new Date().toISOString() })
+    .update(action === "accept" ? { status: "accepted", accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() } : { status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", orderId)
     .eq("restaurant_id", r.id)
     .in("status", action === "accept" ? ["submitted"] : ["submitted", "accepted"])
@@ -439,14 +493,6 @@ export async function allOrdersForEntries(entryIds: string[], includeCancelled =
     map.set(row.entry_id, list);
   }
   return map;
-}
-
-function cartOf(b: Record<string, unknown>) {
-  const raw = Array.isArray(b.items) ? b.items.slice(0, 60) : [];
-  return raw
-    .map((x) => (x ?? {}) as Record<string, unknown>)
-    .filter((x) => typeof x.id === "string" && UUID.test(x.id))
-    .map((x) => ({ id: x.id as string, qty: Math.max(1, Math.min(20, Math.round(Number(x.qty) || 1))) }));
 }
 
 export async function saveTableOrder(entry: { id: string; restaurantId: string }, b: Record<string, unknown>): Promise<Result> {
@@ -496,6 +542,112 @@ export async function updateTable(r: Restaurant, entryId: string, b: Record<stri
     // Anything still waiting for the kitchen is dropped when the table closes.
     await adminClient().from("orders").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("entry_id", entryId).eq("status", "submitted");
   }
+  await broadcastChange(r.id);
+  return { ok: true, value: undefined };
+}
+
+// ---------------------------------------------------------------------------
+// Kitchen stations and the kitchen display
+// ---------------------------------------------------------------------------
+
+/** Replace the restaurant's kitchen stations. Dishes on a removed station go to "Kitchen". */
+export async function setStations(r: Restaurant, input: unknown): Promise<Result> {
+  if (!Array.isArray(input) || input.length > 8) return fail("invalid", 400);
+  const out: Station[] = [];
+  for (const raw of input) {
+    const p = (raw ?? {}) as Record<string, unknown>;
+    const v = { id: str(p.id, 20).toLowerCase(), en: str(p.en, 20), ar: str(p.ar, 20), ur: str(p.ur, 20) };
+    if (!ID.test(v.id) || out.some((o) => o.id === v.id)) return fail("invalid", 400);
+    if (!v.en || !v.ar || !v.ur) return fail("all_languages", 400);
+    out.push(v);
+  }
+  const { error } = await adminClient().from("restaurants").update({ stations: out }).eq("id", r.id);
+  if (error) return dbFail(error.message);
+  const kept = new Set(out.map((x) => x.id));
+  const gone = (r.stations ?? []).map((x) => x.id).filter((id) => !kept.has(id));
+  if (gone.length) await adminClient().from("menu_items").update({ station: "" }).eq("restaurant_id", r.id).in("station", gone);
+  await broadcastChange(r.id);
+  return { ok: true, value: undefined };
+}
+
+export interface KitchenTicket {
+  orderId: string;
+  station: string;
+  where: string; // table number, or "#ticket name" for a waitlist pre-order
+  round: number;
+  kind: "pre" | "table";
+  acceptedAt: number;
+  note: string;
+  lines: OrderLine[];
+}
+export interface KitchenSnapshot {
+  serverNow: number;
+  channel: string;
+  stations: Station[];
+  tickets: KitchenTicket[];
+}
+
+/** Approved orders still cooking, split into one ticket per station. */
+export async function kitchenSnapshot(r: Restaurant): Promise<KitchenSnapshot> {
+  const db = adminClient();
+  const { data } = await db
+    .from("orders")
+    .select("*")
+    .eq("restaurant_id", r.id)
+    .eq("status", "accepted")
+    .is("ready_at", null)
+    .gte("updated_at", new Date(Date.now() - 12 * 3_600_000).toISOString())
+    .order("accepted_at", { ascending: true })
+    .limit(200);
+  const rows = (data ?? []) as (OrderRow & { table_id?: string | null })[];
+  const tableIds = [...new Set(rows.map((o) => o.table_id).filter((x): x is string => !!x))];
+  const entryIds = [...new Set(rows.map((o) => o.entry_id).filter((x): x is string => !!x))];
+  const [tables, entries] = await Promise.all([
+    tableIds.length ? db.from("restaurant_tables").select("id, table_number").in("id", tableIds) : Promise.resolve({ data: [] }),
+    entryIds.length ? db.from("entries").select("id, ticket_number, name, table_label").in("id", entryIds) : Promise.resolve({ data: [] }),
+  ]);
+  const tableNo = new Map(((tables.data ?? []) as { id: string; table_number: string }[]).map((t) => [t.id, t.table_number]));
+  const entry = new Map(((entries.data ?? []) as { id: string; ticket_number: number; name: string; table_label: string }[]).map((e) => [e.id, e]));
+  const tickets: KitchenTicket[] = [];
+  for (const row of rows) {
+    const o = toOrder(row);
+    const e = row.entry_id ? entry.get(row.entry_id) : undefined;
+    const where = (row.table_id && tableNo.get(row.table_id)) || e?.table_label || (e ? `#${e.ticket_number} ${e.name}` : "?");
+    const byStation = new Map<string, OrderLine[]>();
+    for (const l of o.items) {
+      const st = l.station ?? "";
+      if (o.stationReady[st]) continue; // this station already finished its part
+      byStation.set(st, [...(byStation.get(st) ?? []), l]);
+    }
+    for (const [station, lines] of byStation) {
+      tickets.push({ orderId: o.id, station, where, round: o.round, kind: o.kind, acceptedAt: o.acceptedAt ?? o.updatedAt, note: o.note, lines });
+    }
+  }
+  return { serverNow: Date.now(), channel: r.id, stations: r.stations ?? [], tickets };
+}
+
+export async function stationReady(r: Restaurant, orderId: string, station: unknown): Promise<Result> {
+  if (!UUID.test(orderId) || typeof station !== "string" || station.length > 20) return fail("not_found", 404);
+  const { error } = await adminClient().rpc("tp_station_ready", { p_restaurant_id: r.id, p_order_id: orderId, p_station: station }).single();
+  if (error) return fail("not_found", 404);
+  await broadcastChange(r.id);
+  return { ok: true, value: undefined };
+}
+
+/** Floor staff brought the food to the table. */
+export async function markServed(r: Restaurant, orderId: string): Promise<Result> {
+  if (!UUID.test(orderId)) return fail("not_found", 404);
+  const now = new Date().toISOString();
+  const { data } = await adminClient()
+    .from("orders")
+    .update({ served_at: now, ready_at: now, updated_at: now })
+    .eq("id", orderId)
+    .eq("restaurant_id", r.id)
+    .eq("status", "accepted")
+    .is("served_at", null)
+    .select("id")
+    .maybeSingle();
+  if (!data) return fail("not_found", 404);
   await broadcastChange(r.id);
   return { ok: true, value: undefined };
 }

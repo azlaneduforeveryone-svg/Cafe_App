@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
-import { allOrdersForEntries, currencyOf, hasMenu, toOrder } from "./menu";
+import { allOrdersForEntries, cartOf, currencyOf, hasMenu, toOrder } from "./menu";
 import { getRestaurantById, toPublic } from "./queue";
 import type { Order, PublicRestaurant, Restaurant, Section } from "./types";
 
@@ -255,14 +255,6 @@ export async function guestSnapshot(tableId: string, s: SessionRow | null): Prom
     hasMenu: menuOn,
     currency: currencyOf(r),
   };
-}
-
-function cartOf(b: Record<string, unknown>) {
-  const raw = Array.isArray(b.items) ? b.items.slice(0, 60) : [];
-  return raw
-    .map((x) => (x ?? {}) as Record<string, unknown>)
-    .filter((x) => typeof x.id === "string" && UUID.test(x.id))
-    .map((x) => ({ id: x.id as string, qty: Math.max(1, Math.min(20, Math.round(Number(x.qty) || 1))) }));
 }
 
 export async function sessionOrder(s: SessionRow, b: Record<string, unknown>): Promise<Result> {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, BookOpen, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
 import { MenuSheet } from "./MenuSheet";
+import { OrderProgress } from "./OrderProgress";
 import { money } from "@/lib/pricing";
 import { GuestFrame } from "./GuestFrame";
 import { ticketKey } from "./JoinForm";
@@ -414,9 +415,13 @@ function TableCard({
                   </span>
                   <span className="text-xs font-extrabold ltr">{money(o.total, currency)}</span>
                 </div>
-                <p className={`text-xs font-bold mt-1 ${accepted ? "text-emerald-800" : cancelled ? "text-stone-500" : "text-amber-800"}`}>
-                  {accepted ? t.statusAccepted : cancelled ? t.statusCancelled : t.statusSubmitted} · {fmt(t.itemsCount, { n: o.items.reduce((n, l) => n + l.qty, 0) })}
-                </p>
+                {cancelled ? (
+                  <p className="text-xs font-bold mt-1 text-stone-500">{t.statusCancelled}</p>
+                ) : (
+                  <div className="mt-2">
+                    <OrderProgress t={t} order={o} size={56} />
+                  </div>
+                )}
                 <p className="text-[11px] text-stone-500 mt-1">{o.items.map((l) => `${l.qty}× ${tr(l, "name", locale)}`).join(locale === "en" ? ", " : "، ")}</p>
                 {o === pending && (
                   <button type="button" onClick={onCancel} className="mt-2 text-[11px] font-bold text-stone-500 hover:text-red-700 underline">

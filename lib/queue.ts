@@ -8,6 +8,7 @@ import type {
   Country,
   Entry,
   MealPeriod,
+  Station,
   GuestAction,
   HostAction,
   HostSnapshot,
@@ -49,6 +50,7 @@ interface RestaurantRow {
   created_at: string;
   logo_path: string | null;
   meal_periods?: MealPeriod[] | null;
+  stations?: Station[] | null;
 }
 
 interface EntryRow {
@@ -101,6 +103,7 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     createdAt: Date.parse(row.created_at),
     logoPath: row.logo_path ?? null,
     mealPeriods: Array.isArray(row.meal_periods) ? row.meal_periods : [],
+    stations: Array.isArray(row.stations) ? row.stations : [],
   };
 }
 

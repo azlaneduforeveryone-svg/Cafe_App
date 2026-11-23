@@ -45,13 +45,14 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   const alerts = data.tables.flatMap((tb) => tb.alerts.map((a) => ({ ...a, table: tb })));
   const pending = data.tables.flatMap((tb) => tb.orders.filter((o) => o.status === "submitted").map((o) => ({ ...o, table: tb })));
 
-  // Chime when a new order or call arrives.
-  const seen = useRef(alerts.length + pending.length);
+  const readyCount = data.tables.reduce((n, tb) => n + tb.orders.filter((o) => o.readyAt && !o.servedAt).length, 0);
+  // Chime when a new order, a call or food ready to serve arrives.
+  const seen = useRef(alerts.length + pending.length + readyCount);
   useEffect(() => {
-    const n = alerts.length + pending.length;
+    const n = alerts.length + pending.length + readyCount;
     if (n > seen.current) playChime();
     seen.current = n;
-  }, [alerts.length, pending.length]);
+  }, [alerts.length, pending.length, readyCount]);
 
   const show = (msg: string) => {
     setToast(msg);
@@ -188,6 +189,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
                   onOpen={() => run(`/api/host/floor/tables/${tb.id}`, { action: "open" })}
                   onClose={() => run(`/api/host/floor/tables/${tb.id}`, { action: "close" })}
                   onResolve={(a) => run(`/api/host/floor/alerts/${a.id}`, { action: "resolve" })}
+                  onServed={(id) => run(`/api/host/orders/${id}`, { action: "served" })}
                 />
               ))}
             </div>
@@ -259,6 +261,7 @@ function TableCard({
   onOpen,
   onClose,
   onResolve,
+  onServed,
 }: {
   t: Dict;
   tb: FloorTable;
@@ -269,6 +272,7 @@ function TableCard({
   onOpen: () => void;
   onClose: () => void;
   onResolve: (a: ServiceAlert) => void;
+  onServed: (orderId: string) => void;
 }) {
   const d = t as unknown as Record<string, string>;
   const st = STATUS_STYLE[tb.status];
@@ -317,6 +321,19 @@ function TableCard({
           </span>
         </button>
       ))}
+      {tb.orders
+        .filter((o) => o.readyAt && !o.servedAt)
+        .map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onServed(o.id)}
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-extrabold"
+          >
+            <span>{t.readyToServe}</span>
+            <span>{t.markServed} ✓</span>
+          </button>
+        ))}
       {tb.orders.some((o) => o.status === "submitted") && (
         <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1">
           <ChefHat className="w-3 h-3" aria-hidden />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BellRing, BookOpen, Check, Copy, Droplets, HandHelping, Lock, Receipt, ShoppingBag, Utensils, Wifi, X } from "lucide-react";
 import { MenuSheet } from "./MenuSheet";
+import { OrderProgress } from "./OrderProgress";
 import { GuestFrame } from "./GuestFrame";
 import { useLive } from "@/components/useLive";
 import { fmt, tr } from "@/lib/format";
@@ -80,7 +81,7 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
             {shown.map((o) => {
               const accepted = o.status === "accepted";
               return (
-                <div key={o.id} className={`p-3.5 rounded-2xl border ${accepted ? "bg-emerald-50 border-emerald-300" : "bg-white border-gold"}`}>
+                <div key={o.id} className={`p-3.5 rounded-2xl border ${o.readyAt && !o.servedAt ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300" : accepted ? "bg-white border-emerald-200" : "bg-white border-gold"}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-extrabold flex items-center gap-1.5">
                       <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
@@ -88,8 +89,10 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
                     </span>
                     <span className="text-xs font-extrabold ltr">{money(o.total, data.currency)}</span>
                   </div>
-                  <p className={`text-xs font-bold mt-1 ${accepted ? "text-emerald-800" : "text-amber-800"}`}>{accepted ? t.statusAccepted : t.statusSubmitted}</p>
-                  <p className="text-[11px] text-stone-500 mt-1">{o.items.map((l) => `${l.qty}× ${tr(l, "name", locale)}`).join(locale === "en" ? ", " : "، ")}</p>
+                  <div className="mt-2">
+                    <OrderProgress t={t} order={o} />
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-2">{o.items.map((l) => `${l.qty}× ${tr(l, "name", locale)}`).join(locale === "en" ? ", " : "، ")}</p>
                   {o === pending && (
                     <button
                       type="button"

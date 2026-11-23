@@ -29,6 +29,7 @@ export interface Restaurant {
   proUntil: number | null;
   trialEndsAt: number | null;
   mealPeriods: MealPeriod[];
+  stations: Station[];
   alertsUsed: number;
   alertsPeriod: string; // YYYY-MM, free alerts reset when it changes
   nextTicket: number;
@@ -172,6 +173,28 @@ export interface MealPeriod {
   end: string; // HH:MM
 }
 
+/** A kitchen station (e.g. Tandoor). Dishes are routed to its column on the kitchen display. */
+export interface Station {
+  id: string;
+  en: string;
+  ar: string;
+  ur: string;
+}
+
+/** A size with its own price (e.g. Half 18, Full 32). */
+export interface Portion {
+  id: string;
+  en: string;
+  ar: string;
+  ur: string;
+  price: number;
+}
+
+export type SpiceLevel = "mild" | "medium" | "hot";
+export const SPICE_LEVELS: SpiceLevel[] = ["mild", "medium", "hot"];
+export const ALLERGENS = ["dairy", "nuts", "gluten", "egg", "seafood", "soy", "sesame"] as const;
+export type Allergen = (typeof ALLERGENS)[number];
+
 export interface MenuItem {
   id: string;
   categoryId: string | null;
@@ -194,12 +217,18 @@ export interface MenuItem {
   /** Worked out by the database for right now. */
   inStock: boolean;
   onSchedule: boolean;
+  station: string;
+  allergens: Allergen[];
+  spiceLevels: SpiceLevel[];
+  portions: Portion[];
+  upsellItemId: string | null;
   sort: number;
 }
 
 export interface Menu {
   currency: string;
   mealPeriods: MealPeriod[];
+  stations: Station[];
   categories: MenuCategory[];
   items: MenuItem[];
 }
@@ -213,7 +242,12 @@ export interface OrderLine {
   nameAr: string;
   nameUr: string;
   price: number;
+  station?: string;
+  spice?: SpiceLevel | null;
+  portion?: { id: string; en: string; ar: string; ur: string } | null;
 }
+
+export type OrderStage = "ordered" | "cooking" | "ready" | "served" | "cancelled";
 
 export interface Order {
   id: string;
@@ -225,4 +259,16 @@ export interface Order {
   note: string;
   createdAt: number;
   updatedAt: number;
+  acceptedAt: number | null;
+  readyAt: number | null;
+  servedAt: number | null;
+  stationReady: Record<string, string>;
+}
+
+export function stageOf(o: Pick<Order, "status" | "readyAt" | "servedAt">): OrderStage {
+  if (o.status === "cancelled") return "cancelled";
+  if (o.status === "submitted") return "ordered";
+  if (o.servedAt) return "served";
+  if (o.readyAt) return "ready";
+  return "cooking";
 }

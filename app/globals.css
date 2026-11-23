@@ -10,10 +10,12 @@
   --color-line: #e7e0d5;
   --color-go: #15803d;
 
-  --font-en: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-serif-en: "Playfair Display", Georgia, serif;
-  --font-ar: "Cairo", ui-sans-serif, system-ui, sans-serif;
-  --font-ur: "Noto Sans Arabic", "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-en: var(--ff-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif-en: var(--ff-playfair), Georgia, serif;
+  --font-ar: var(--ff-plex-ar), var(--ff-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif-ar: var(--ff-amiri), var(--ff-plex-ar), serif;
+  --font-ur: var(--ff-gulzar), var(--ff-plex-ar), var(--ff-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif-ur: var(--ff-nastaliq), var(--ff-gulzar), var(--ff-plex-ar), serif;
 }
 
 body {
@@ -25,6 +27,16 @@ body {
 .loc-ar { font-family: var(--font-ar); }
 .loc-ur { font-family: var(--font-ur); }
 .loc-en .display { font-family: var(--font-serif-en); }
+.loc-ar .display { font-family: var(--font-serif-ar); font-weight: 700; }
+/* Nastaliq is tall: extra line height stops the dots and descenders being clipped. */
+.loc-ur { line-height: 1.85; }
+.loc-ur .display { font-family: var(--font-serif-ur); font-weight: 700; line-height: 2.1; }
+/* Nastaliq needs a little more size than Latin to stay readable in small labels. */
+.loc-ur .text-\[10px\] { font-size: 11.5px; }
+.loc-ur .text-\[11px\] { font-size: 12.5px; }
+.loc-ur .text-xs { font-size: 13px; }
+/* Numbers, prices and Latin text stay in the Latin face inside Urdu. */
+.loc-ur .ltr, .loc-ur input, .loc-ur .font-mono { font-family: var(--font-en); line-height: 1.5; }
 
 /* Ticket numbers, phones and timers always read left to right. */
 .ltr { direction: ltr; unicode-bidi: isolate; }
@@ -49,4 +61,9 @@ body {
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
 }

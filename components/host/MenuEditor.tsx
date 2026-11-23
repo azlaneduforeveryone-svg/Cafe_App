@@ -5,11 +5,12 @@ import { CalendarClock, ImagePlus, PackageCheck, PackageX, Pencil, Plus, Tag, Tr
 import { Modal } from "@/components/Modal";
 import { uploadErrorText } from "./LogoCard";
 import { MealTimesCard, SchedulePicker, scheduleSummary } from "./Schedule";
+import { StationsCard } from "./StationsCard";
 import { uploadImage } from "@/lib/image";
 import { money } from "@/lib/pricing";
 import { tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
-import type { Locale, MealPeriod, Menu, MenuCategory, MenuItem } from "@/lib/types";
+import { ALLERGENS, SPICE_LEVELS, type Allergen, type Locale, type MealPeriod, type Menu, type MenuCategory, type MenuItem, type SpiceLevel, type Station } from "@/lib/types";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-white border border-line text-sm focus:outline-none focus:ring-2 focus:ring-ember";
 const LANGS: { key: "En" | "Ar" | "Ur"; dir: "ltr" | "rtl"; lang: string }[] = [
@@ -28,6 +29,8 @@ function errorText(t: Dict, code?: string) {
       return t.badComparePrice;
     case "bad_time":
       return t.badTime;
+    case "bad_portions":
+      return t.badPortions;
     default:
       return t.errorGeneric;
   }
@@ -71,6 +74,7 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
   return (
     <div className="space-y-6">
       <MealTimesCard t={t} initial={menu.mealPeriods} onSaved={reload} />
+      <StationsCard t={t} initial={menu.stations} onSaved={reload} />
       <Categories t={t} locale={locale} categories={menu.categories} meal={menu.mealPeriods} run={run} />
 
       <section className="bg-white rounded-3xl border border-line shadow-sm p-5">
@@ -198,6 +202,8 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
           item={editing === "new" ? null : editing}
           categories={menu.categories}
           meal={menu.mealPeriods}
+          stations={menu.stations}
+          allItems={menu.items}
           currency={menu.currency}
           onClose={() => setEditing(null)}
           onSaved={async () => {
@@ -388,6 +394,11 @@ interface Draft {
   isDeal: boolean;
   days: number;
   periods: string[];
+  station: string;
+  allergens: Allergen[];
+  spiceLevels: SpiceLevel[];
+  portions: { id: string; en: string; ar: string; ur: string; price: string }[];
+  upsellItemId: string;
   categoryId: string;
   imagePath: string | null;
   imageUrl: string | null;
@@ -399,6 +410,8 @@ function ItemModal({
   item,
   categories,
   meal,
+  stations,
+  allItems,
   currency,
   onClose,
   onSaved,
@@ -408,6 +421,8 @@ function ItemModal({
   item: MenuItem | null;
   categories: MenuCategory[];
   meal: MealPeriod[];
+  stations: Station[];
+  allItems: MenuItem[];
   currency: string;
   onClose: () => void;
   onSaved: () => void;
@@ -425,6 +440,11 @@ function ItemModal({
     isDeal: item?.isDeal ?? false,
     days: item?.days ?? 127,
     periods: item?.periods ?? [],
+    station: item?.station ?? "",
+    allergens: item?.allergens ?? [],
+    spiceLevels: item?.spiceLevels ?? [],
+    portions: (item?.portions ?? []).map((p) => ({ ...p, price: String(p.price) })),
+    upsellItemId: item?.upsellItemId ?? "",
     categoryId: item?.categoryId ?? "",
     imagePath: item?.imagePath ?? null,
     imageUrl: item?.imageUrl ?? null,
@@ -457,6 +477,8 @@ function ItemModal({
       price: Number(d.price),
       compareAtPrice: d.compareAtPrice.trim() ? Number(d.compareAtPrice) : null,
       categoryId: d.categoryId || null,
+      portions: d.portions.map((p) => ({ ...p, price: Number(p.price) })),
+      upsellItemId: d.upsellItemId || null,
     };
     const r = await send(item ? `/api/host/menu/items/${item.id}` : "/api/host/menu/items", item ? "PUT" : "POST", body);
     setBusy(false);
@@ -568,6 +590,133 @@ function ItemModal({
             </span>
           </label>
         </div>
+
+        <fieldset className="p-3 rounded-xl border border-line space-y-3">
+          <legend className="px-1 text-xs font-bold text-stone-700">{t.optionsTitle}</legend>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-bold text-stone-500 mb-1">{t.stationLbl}</span>
+              <select value={d.station} onChange={(e) => set("station", e.target.value)} className={input}>
+                <option value="">{t.noStation}</option>
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s[locale] || s.en}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-bold text-stone-500 mb-1">{t.upsellPick}</span>
+              <select value={d.upsellItemId} onChange={(e) => set("upsellItemId", e.target.value)} className={input}>
+                <option value="">{t.noneOpt}</option>
+                {allItems
+                  .filter((x) => x.id !== item?.id && x.portions.length === 0)
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {tr(x, "name", locale)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-stone-500 mb-1.5">{t.allergensLbl}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALLERGENS.map((a) => {
+                const on = d.allergens.includes(a);
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set("allergens", on ? d.allergens.filter((x) => x !== a) : [...d.allergens, a])}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border ${on ? "bg-amber-500 text-ink border-amber-500" : "bg-white text-stone-600 border-line"}`}
+                  >
+                    {(t as unknown as Record<string, string>)[`alg_${a}`]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-stone-500 mb-1.5">{t.spiceLbl}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SPICE_LEVELS.map((l) => {
+                const on = d.spiceLevels.includes(l);
+                return (
+                  <button
+                    key={l}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set("spiceLevels", on ? d.spiceLevels.filter((x) => x !== l) : SPICE_LEVELS.filter((x) => x === l || d.spiceLevels.includes(x)))}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border ${on ? "bg-red-600 text-white border-red-600" : "bg-white text-stone-600 border-line"}`}
+                  >
+                    {(t as unknown as Record<string, string>)[`spice_${l}`]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-stone-500">{t.portionsLbl}</p>
+            <p className="text-[11px] text-stone-500 mb-1.5">{t.portionsHelp}</p>
+            <div className="space-y-2">
+              {d.portions.map((p, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_6rem_auto] gap-1.5 items-center">
+                  {(["en", "ar", "ur"] as const).map((k) => (
+                    <input
+                      key={k}
+                      aria-label={`${t.portionLbl} ${k}`}
+                      value={p[k]}
+                      maxLength={20}
+                      dir={k === "en" ? "ltr" : "rtl"}
+                      onChange={(e) => set("portions", d.portions.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))}
+                      className={input}
+                    />
+                  ))}
+                  <input
+                    aria-label={t.price}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    dir="ltr"
+                    value={p.price}
+                    onChange={(e) => set("portions", d.portions.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))}
+                    className={input}
+                  />
+                  <button type="button" aria-label={t.delete} onClick={() => set("portions", d.portions.filter((_, j) => j !== i))} className="p-2 rounded-lg text-stone-500 hover:text-red-700">
+                    <Trash2 className="w-4 h-4" aria-hidden />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-2">
+              {d.portions.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    set("portions", [
+                      { id: "half", en: "Half", ar: "نصف", ur: "ہاف", price: d.price ? String(Math.round(Number(d.price) * 0.6)) : "" },
+                      { id: "full", en: "Full", ar: "كامل", ur: "فل", price: d.price },
+                    ])
+                  }
+                  className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-bold"
+                >
+                  {t.presetHalfFull}
+                </button>
+              )}
+              {d.portions.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => set("portions", [...d.portions, { id: `size-${d.portions.length + 1}-${Date.now() % 1000}`, en: "", ar: "", ur: "", price: "" }])}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-line text-xs font-bold"
+                >
+                  {t.addPortion}
+                </button>
+              )}
+            </div>
+          </div>
+        </fieldset>
 
         <fieldset className="p-3 rounded-xl border border-line">
           <legend className="px-1 text-xs font-bold text-stone-700">{t.scheduleTitle}</legend>

@@ -237,3 +237,25 @@ Test checklist:
 - [ ] **Close table** on T5: the phone switches to "Thanks for visiting" and can't order
 - [ ] **New QR code** on T5, then scan the old printed code: "This QR code isn't valid"
 - [ ] Floor page and guest table page in Arabic and Urdu read right to left
+
+---
+
+## Fonts, dish options and the kitchen display (added later)
+
+1. Supabase > **SQL Editor** > run `supabase/migrations/0007_dish_options_kitchen.sql` (safe to re-run).
+2. Fonts are now bundled in `app/fonts/` (Open Font License, see `app/fonts/LICENSE.md`): Plus Jakarta Sans and Playfair Display for English, IBM Plex Sans Arabic and Amiri for Arabic, Gulzar and Noto Nastaliq Urdu for Urdu. No font requests go to Google any more.
+
+What it does:
+- **Kitchen stations** (Menu page): e.g. Tandoor, Curry, Drinks. Each dish picks a station.
+- **Dish options** (dish edit window > Options): allergens, which spice levels the guest may choose (Mild / Medium / Hot), sizes with their own prices (one tap for Half / Full), and a "Make it a combo" dish offered with it.
+- **Guest menu**: search bar, category tabs, and a slide-up window per dish with allergens, size, spice, combo and quantity. The server prices every size; a phone can't change a price.
+- **Kitchen display** (`Kitchen` in the top bar): dark screen, one column per station. Each ticket shows table (or ticket number for a pre-order), dishes, size and spice, the note and a timer that turns amber after 10 minutes and red after 18. **Mark ready** finishes that station's part; when every station is done the order is Ready.
+- **Ready and served**: a ready order shows green "Ready to serve" on the Floor table card with a chime; staff tap it when served. The guest's phone shows a progress ring: Ordered > Cooking > Ready > Served.
+
+Test checklist:
+- [ ] Menu page: add Tandoor, Curry, Drinks; give Butter Chicken station Curry, allergens Dairy and Nuts, spice levels Mild/Medium/Hot, sizes Half 18 / Full 32, combo Garlic Naan
+- [ ] Guest table phone: search "naan" finds Garlic Naan; tabs filter; Butter Chicken opens the window with allergens, sizes, spice and combo; Half + Hot + combo adds two lines with the right prices
+- [ ] Send the order; Floor > Send to kitchen; Kitchen shows Butter Chicken under Curry (Half, Hot) and Naan under Tandoor, with the timer running
+- [ ] Mark ready on Curry only: order stays on the kitchen screen under Tandoor; Mark ready on Tandoor: it leaves the screen
+- [ ] Guest ring moves Ordered > Cooking > Ready; Floor shows "Ready to serve" with a chime; tapping it moves the guest to Served
+- [ ] Arabic and Urdu: headings use Amiri / Nastaliq, Urdu text isn't clipped, prices stay in Latin digits
