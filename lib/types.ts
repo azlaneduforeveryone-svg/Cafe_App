@@ -22,7 +22,12 @@ export interface Restaurant {
   sections: Section[];
   gracePeriodMin: number;
   minutesPerParty: number;
+  /** Effective plan: "pro" while paid, on trial, or set to pro by hand. */
   plan: Plan;
+  /** The plan column as stored (only "pro" when set by hand / test mode). */
+  basePlan: Plan;
+  proUntil: number | null;
+  trialEndsAt: number | null;
   alertsUsed: number;
   alertsPeriod: string; // YYYY-MM, free alerts reset when it changes
   nextTicket: number;

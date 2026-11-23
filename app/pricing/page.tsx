@@ -114,11 +114,17 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                 <span className="block w-full py-3 rounded-xl bg-emerald-900/60 border border-emerald-500/40 text-emerald-200 text-sm font-bold text-center">{t.currentPlan}</span>
               ) : (
                 <>
-                  <p className="text-[11px] text-stone-400 flex items-start gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />
-                    {t.gatewayPending}
-                  </p>
-                  {ctx && testMode && <PlanButton label={t.activateTest} plan="pro" />}
+                  {ctx ? (
+                    <Link href="/dashboard/billing" className="block w-full py-3 rounded-xl bg-ember hover:bg-ember-dark text-white text-sm font-bold text-center">
+                      {t.billSubscribeCta}
+                    </Link>
+                  ) : (
+                    <p className="text-[11px] text-stone-400 flex items-start gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />
+                      {t.billTrialNote}
+                    </p>
+                  )}
+                  {ctx && testMode && <PlanButton label={t.activateTest} plan="pro" subtle />}
                   {!ctx && (
                     <Link href="/signup" className="block w-full py-3 rounded-xl bg-ember hover:bg-ember-dark text-white text-sm font-bold text-center">
                       {t.signup}

@@ -73,6 +73,9 @@ const { error: updErr } = await db
   })
   .eq("id", restaurantId);
 if (updErr) die("Could not update the demo restaurant:", updErr);
+// Demo stays on the Free plan (no trial, nothing paid) so the upgrade prompt shows.
+// Ignored if 0004_billing.sql hasn't been run yet.
+await db.from("restaurants").update({ trial_ends_at: new Date(Date.now() - 86_400_000).toISOString(), pro_until: null }).eq("id", restaurantId);
 
 // 3. Fresh queue with three waiting guests.
 await db.from("entries").delete().eq("restaurant_id", restaurantId);

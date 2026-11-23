@@ -16,7 +16,7 @@ export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale:
     { key: "menu", href: "/dashboard/menu", label: t.menuNav, Icon: BookOpen },
     { key: "reports", href: "/dashboard/reports", label: t.reportsNav, Icon: BarChart3 },
     { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings },
-    { key: "plans", href: "/pricing", label: t.plans, Icon: Crown },
+    { key: "plans", href: "/dashboard/billing", label: t.plans, Icon: Crown },
   ] as const;
   const atLimit = restaurant.plan === "free" && alertsUsed >= FREE_LIMIT;
 
@@ -46,7 +46,7 @@ export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale:
 
         <div className="flex items-center gap-2">
           <Link
-            href="/pricing"
+            href="/dashboard/billing"
             className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
               restaurant.plan === "pro"
                 ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-300"

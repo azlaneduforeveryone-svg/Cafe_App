@@ -39,6 +39,8 @@ interface RestaurantRow {
   grace_period_min: number;
   minutes_per_party: number;
   plan: Plan;
+  pro_until?: string | null;
+  trial_ends_at?: string | null;
   alerts_used: number;
   alerts_period: string;
   next_ticket: number;
@@ -69,6 +71,11 @@ interface EntryRow {
 const ms = (t: string | null) => (t ? Date.parse(t) : null);
 
 export function toRestaurant(row: RestaurantRow): Restaurant {
+  const proUntil = ms(row.pro_until ?? null);
+  const trialEndsAt = ms(row.trial_ends_at ?? null);
+  const now = Date.now();
+  // Same rule as tp_is_pro() in SQL.
+  const isPro = row.plan === "pro" || (proUntil !== null && proUntil > now) || (trialEndsAt !== null && trialEndsAt > now);
   return {
     id: row.id,
     slug: row.slug,
@@ -79,7 +86,10 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     sections: Array.isArray(row.sections) ? row.sections : [],
     gracePeriodMin: row.grace_period_min,
     minutesPerParty: row.minutes_per_party,
-    plan: row.plan,
+    plan: isPro ? "pro" : "free",
+    basePlan: row.plan,
+    proUntil,
+    trialEndsAt,
     alertsUsed: row.alerts_used,
     alertsPeriod: row.alerts_period,
     nextTicket: row.next_ticket,
@@ -440,9 +450,13 @@ export async function updateSettings(r: Restaurant, input: SettingsInput): Promi
   return { ok: true, value: undefined };
 }
 
-/** Test-mode plan switch. Replace with the payment gateway's webhook. */
+/**
+ * Test-mode plan switch (real payments go through lib/billing.ts).
+ * Switching to free also ends any trial or paid time so the free limit can be tested.
+ */
 export async function setPlan(r: Restaurant, plan: Plan): Promise<Result> {
-  const { error } = await adminClient().from("restaurants").update({ plan }).eq("id", r.id);
+  const patch = plan === "free" ? { plan, trial_ends_at: new Date().toISOString(), pro_until: null } : { plan };
+  const { error } = await adminClient().from("restaurants").update(patch).eq("id", r.id);
   if (error) {
     const e = dbError(error.message);
     return fail(e.error, e.status);
