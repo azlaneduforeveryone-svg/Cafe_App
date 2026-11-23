@@ -259,3 +259,29 @@ Test checklist:
 - [ ] Mark ready on Curry only: order stays on the kitchen screen under Tandoor; Mark ready on Tandoor: it leaves the screen
 - [ ] Guest ring moves Ordered > Cooking > Ready; Floor shows "Ready to serve" with a chime; tapping it moves the guest to Served
 - [ ] Arabic and Urdu: headings use Amiri / Nastaliq, Urdu text isn't clipped, prices stay in Latin digits
+
+---
+
+## Bill, split, tip, payment method, receipt and rating (migration 0008)
+
+**Run:** SQL Editor > paste `supabase/migrations/0008_bills_ratings.sql` > Run. Safe to re-run. Needs 0007 first.
+
+What it adds:
+- `bills` (one per table session, or per seated waitlist ticket with no table) and `ratings` (one per paid bill, 1 to 5 stars, comment up to 300 characters). RLS on, no policies, server key only.
+- `restaurants.next_receipt`: receipt numbers per restaurant, starting at 1.
+- `tp_request_bill`: guest asks for the bill. Subtotal comes only from orders the restaurant approved; tip capped at 30%, split 1 to 20, method from a fixed list. Sends a "bill" call to the floor.
+- `tp_mark_paid`: staff confirm payment (works without a guest request). Gives the next receipt number, freezes the lines, cancels rounds still waiting for approval, resolves the bill call. Tapping twice changes nothing.
+- Trigger `orders_block_after_paid`: once paid, no new round, no edit to a waiting round and no late approval can be added to that bill.
+
+TablePulse records how the guest pays; it does not take payment. Receipts say "Not a tax invoice".
+
+### Checklist
+- [ ] Migration ran with no error; `select count(*) from bills;` returns 0.
+- [ ] Guest at a table with an approved order sees "Your bill so far". Get the bill > tip 10% > split 3 > mada > Ask. Floor card turns amber with total, method and per-person amount.
+- [ ] Guest can change tip or split before paying; the floor updates.
+- [ ] Floor: Mark paid > method > Payment received. Card shows "Paid #1". Guest phone shows the receipt and stars.
+- [ ] After paid, the guest's "Order from the menu" button is gone and a new order is refused.
+- [ ] Close the table: the guest phone still shows the receipt and can rate (for 6 hours).
+- [ ] Rating shows on the paid strip and in "Rating today" on the floor.
+- [ ] Waitlist Tables tab: seated ticket with approved food has Mark paid; ticket page shows bill and receipt.
+- [ ] PK restaurant shows Cash, Card, JazzCash, Easypaisa, Raast; SA shows Cash, Card, mada, Apple Pay, STC Pay, Google Pay.

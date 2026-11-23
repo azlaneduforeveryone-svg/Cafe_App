@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BellRing, BookOpen, Check, Copy, Droplets, HandHelping, Lock, Receipt, ShoppingBag, Utensils, Wifi, X } from "lucide-react";
+import { BillCard, BillSheet, ReceiptCard } from "./BillCard";
 import { MenuSheet } from "./MenuSheet";
 import { OrderProgress } from "./OrderProgress";
 import { GuestFrame } from "./GuestFrame";
@@ -21,8 +22,12 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
   const [showMenu, setShowMenu] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [billSheet, setBillSheet] = useState(false);
   const d = t as unknown as Record<string, string>;
   const open = data.open && !gone;
+  const bill = data.bill;
+  const billEndpoint = `/api/table/${tableId}/bill`;
+  const paid = bill?.status === "paid";
   const pending = data.orders.find((o) => o.kind === "table" && o.status === "submitted") ?? null;
 
   async function call(type: AlertType) {
@@ -31,6 +36,17 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
     setNotice(res?.ok ? `${d[`al_${type}`]}: ${t.callSent}` : t.errorGeneric);
     window.setTimeout(() => setNotice(null), 4000);
     void refresh();
+  }
+
+  // Table closed after paying: the receipt and rating stay available for a few hours.
+  if (!open && paid && bill && !gone) {
+    return (
+      <GuestFrame t={t} locale={locale} restaurant={data.restaurant}>
+        <div className="flex-1 py-4">
+          <ReceiptCard t={t} locale={locale} bill={bill} currency={data.currency} restaurant={data.restaurant} endpoint={billEndpoint} onChange={() => void refresh()} />
+        </div>
+      </GuestFrame>
+    );
   }
 
   if (!open) {
@@ -64,7 +80,9 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
           </p>
         )}
 
-        {data.hasMenu && (
+        {bill && <BillCard t={t} locale={locale} bill={bill} currency={data.currency} restaurant={data.restaurant} endpoint={billEndpoint} canRequest={!paid} onChange={() => void refresh()} />}
+
+        {data.hasMenu && !paid && (
           <button
             type="button"
             onClick={() => setShowMenu(true)}
@@ -130,7 +148,13 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
                 key={type}
                 type="button"
                 disabled={openAlerts.has(type)}
-                onClick={() => call(type)}
+                onClick={() => {
+                  // With food approved, "bill" opens the real bill (split, tip, method) instead of a bare call.
+                  if (type === "bill" && bill && bill.status === "open") {
+                    setServiceOpen(false);
+                    setBillSheet(true);
+                  } else call(type);
+                }}
                 className="w-full flex items-center justify-between gap-2 px-3 py-3 rounded-xl text-sm font-bold hover:bg-stone-100 disabled:opacity-60"
               >
                 <span className="flex items-center gap-2">
@@ -152,6 +176,10 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
           {t.callWaiter}
         </button>
       </div>
+
+      {billSheet && bill && (
+        <BillSheet t={t} locale={locale} bill={bill} currency={data.currency} country={data.restaurant.country} endpoint={billEndpoint} onClose={() => setBillSheet(false)} onSent={() => void refresh()} />
+      )}
 
       {showMenu && (
         <MenuSheet

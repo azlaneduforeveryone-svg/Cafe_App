@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BellRing, ChefHat, Clock, Droplets, HandHelping, LayoutGrid, Plus, Printer, QrCode, Receipt, RefreshCw, Trash2, Users, Utensils, Wifi, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
+import { BillStrip, MarkPaidModal } from "./MarkPaid";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
@@ -18,6 +19,7 @@ const STATUS_STYLE: Record<TableStatus, { card: string; badge: string }> = {
   ordering: { card: "border-sky-300 bg-sky-50/60", badge: "bg-sky-600 text-white" },
   eating: { card: "border-emerald-300 bg-emerald-50/60", badge: "bg-emerald-600 text-white" },
   bill: { card: "border-amber-400 bg-amber-50", badge: "bg-amber-500 text-ink" },
+  paid: { card: "border-emerald-500 bg-white", badge: "bg-emerald-100 text-emerald-900" },
   help: { card: "border-red-500 bg-red-50 ring-4 ring-red-200", badge: "bg-red-600 text-white animate-pulse" },
 };
 const ALERT_ICON = { water: Droplets, napkins: Utensils, bill: Receipt, help: HandHelping } as const;
@@ -35,6 +37,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   const router = useRouter();
   const d = t as unknown as Record<string, string>;
   const [seating, setSeating] = useState<FloorTable | null>(null);
+  const [paying, setPaying] = useState<FloorTable | null>(null);
   const [managing, setManaging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -58,7 +61,8 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
     setToast(msg);
     window.setTimeout(() => setToast((c) => (c === msg ? null : c)), 3000);
   };
-  const errText = (code?: string) => (code === "table_busy" ? t.errTableBusy : code === "duplicate_table" ? t.errDuplicateTable : t.errorGeneric);
+  const errText = (code?: string) =>
+    code === "table_busy" ? t.errTableBusy : code === "duplicate_table" ? t.errDuplicateTable : code === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric;
   async function run(url: string, body?: unknown, method?: string) {
     unlockAudio();
     const r = await post(url, body, method);
@@ -70,10 +74,11 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   return (
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 space-y-5">
       {/* Shift header */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Kpi label={t.kpiActiveTables} value={`${data.kpis.activeTables}/${data.kpis.totalTables}`} />
         <Kpi label={t.kpiOrdersToday} value={String(data.kpis.ordersToday)} />
         <Kpi label={t.kpiRevenueToday} value={money(data.kpis.revenueToday, data.currency)} />
+        <Kpi label={t.kpiRatingToday} value={data.kpis.ratingToday === null ? "–" : `${data.kpis.ratingToday} ★ (${data.kpis.ratingsToday})`} />
         <div className="bg-white rounded-2xl border border-line p-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setManaging(true)} className="px-3 py-2 rounded-xl bg-ink text-white text-xs font-bold inline-flex items-center gap-1.5">
             <LayoutGrid className="w-4 h-4" aria-hidden />
@@ -190,12 +195,26 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
                   onClose={() => run(`/api/host/floor/tables/${tb.id}`, { action: "close" })}
                   onResolve={(a) => run(`/api/host/floor/alerts/${a.id}`, { action: "resolve" })}
                   onServed={(id) => run(`/api/host/orders/${id}`, { action: "served" })}
+                  onPay={() => setPaying(tb)}
                 />
               ))}
             </div>
           )}
         </section>
       </div>
+
+      {paying && (
+        <MarkPaidModal
+          t={t}
+          title={fmt(t.markPaidTitle, { n: paying.number })}
+          country={data.country}
+          currency={data.currency}
+          bill={paying.bill?.status === "requested" ? paying.bill : null}
+          fallbackTotal={paying.orders.filter((o) => o.status === "accepted").reduce((n, o) => n + o.total, 0)}
+          onConfirm={(method) => (paying.session ? run("/api/host/bills", { sessionId: paying.session.id, method }) : Promise.resolve(false))}
+          onClose={() => setPaying(null)}
+        />
+      )}
 
       {seating && (
         <Modal title={fmt(t.seatPick, { n: seating.number })} onClose={() => setSeating(null)} closeLabel={t.close}>
@@ -262,6 +281,7 @@ function TableCard({
   onClose,
   onResolve,
   onServed,
+  onPay,
 }: {
   t: Dict;
   tb: FloorTable;
@@ -273,6 +293,7 @@ function TableCard({
   onClose: () => void;
   onResolve: (a: ServiceAlert) => void;
   onServed: (orderId: string) => void;
+  onPay: () => void;
 }) {
   const d = t as unknown as Record<string, string>;
   const st = STATUS_STYLE[tb.status];
@@ -334,6 +355,7 @@ function TableCard({
             <span>{t.markServed} ✓</span>
           </button>
         ))}
+      {tb.bill && <BillStrip t={t} bill={tb.bill} currency={currency} />}
       {tb.orders.some((o) => o.status === "submitted") && (
         <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1">
           <ChefHat className="w-3 h-3" aria-hidden />
@@ -353,9 +375,16 @@ function TableCard({
               </button>
             </>
           ) : (
+            <>
+            {total > 0 && tb.bill?.status !== "paid" && (
+              <button type="button" onClick={onPay} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">
+                {t.markPaid}
+              </button>
+            )}
             <button type="button" onClick={() => setConfirm(true)} title={t.closeTableConfirm} className="px-2.5 py-1.5 rounded-lg border border-line bg-white text-[11px] font-bold">
               {t.closeTable}
             </button>
+            </>
           )
         ) : (
           <>

@@ -125,6 +125,7 @@ export interface HostTable {
   label: string;
   /** Pre-order (if any) and every round ordered at the table, oldest first. */
   orders: Order[];
+  bill: BillSummary | null;
 }
 
 export interface TicketSnapshot {
@@ -151,7 +152,7 @@ export interface TicketSnapshot {
   order: Order | null;
   hasMenu: boolean;
   /** Present after the guest is seated. */
-  table: { open: boolean; label: string; orders: Order[] } | null;
+  table: { open: boolean; label: string; orders: Order[]; bill: Bill | null } | null;
 }
 
 export interface MenuCategory {
@@ -274,4 +275,60 @@ export function stageOf(o: Pick<Order, "status" | "readyAt" | "servedAt">): Orde
   if (o.servedAt) return "served";
   if (o.readyAt) return "ready";
   return "cooking";
+}
+
+// ---------------------------------------------------------------------------
+// Bills
+// ---------------------------------------------------------------------------
+
+export type PayMethod = "cash" | "card" | "mada" | "apple_pay" | "google_pay" | "stc_pay" | "jazzcash" | "easypaisa" | "raast";
+export const PAY_METHODS: Record<Country, PayMethod[]> = {
+  SA: ["cash", "card", "mada", "apple_pay", "stc_pay", "google_pay"],
+  PK: ["cash", "card", "jazzcash", "easypaisa", "raast"],
+};
+export const TIP_CHOICES = [0, 5, 10, 15] as const;
+
+export interface BillLine {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  price: number;
+  qty: number;
+  portion: Portion | null;
+  spice: SpiceLevel | null;
+}
+
+/**
+ * "open": food has been approved but the guest hasn't asked for the bill yet (a preview).
+ * "requested": the guest asked; staff see it on the floor. "paid": staff confirmed payment.
+ */
+export interface Bill {
+  id: string | null;
+  status: "open" | "requested" | "paid";
+  subtotal: number;
+  tipPct: number;
+  tipAmount: number;
+  total: number;
+  splitWays: number;
+  perPerson: number;
+  method: PayMethod;
+  receiptNo: number | null;
+  lines: BillLine[];
+  requestedAt: number | null;
+  paidAt: number | null;
+  rating: { stars: number; comment: string } | null;
+}
+
+/** What staff see on a table card. */
+export interface BillSummary {
+  status: "requested" | "paid";
+  subtotal: number;
+  tipAmount: number;
+  total: number;
+  splitWays: number;
+  perPerson: number;
+  method: PayMethod;
+  receiptNo: number | null;
+  stars: number | null;
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { billForEntry, billSummaries } from "./bills";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
@@ -238,7 +239,11 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
   ]);
   const busy = new Set(((openSessions.data ?? []) as { table_id: string }[]).map((x) => x.table_id));
   const diningTables = (allTables.data ?? []) as { id: string; table_number: string; capacity: number; section_id: string }[];
-  const [orders, tableOrders] = await Promise.all([ordersForEntries(entries.map((e) => e.id)), allOrdersForEntries(tables.map((e) => e.id))]);
+  const [orders, tableOrders, bills] = await Promise.all([
+    ordersForEntries(entries.map((e) => e.id)),
+    allOrdersForEntries(tables.map((e) => e.id)),
+    billSummaries([], tables.map((e) => e.id)),
+  ]);
   const closedToday = (closed.data ?? []) as Pick<EntryRow, "status" | "joined_at" | "notified_at" | "closed_at">[];
   const seated = closedToday.filter((e) => e.status === "seated");
   const avgWaitToday = seated.length
@@ -283,6 +288,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       seatedAt: e.closedAt ?? e.joinedAt,
       label: e.tableLabel,
       orders: tableOrders.get(e.id) ?? [],
+      bill: bills.byEntry.get(e.id) ?? null,
     })),
     freeTables: diningTables.filter((x) => !busy.has(x.id)).map((x) => ({ id: x.id, number: x.table_number, capacity: x.capacity, sectionId: x.section_id })),
     hasTables: diningTables.length > 0,
@@ -345,6 +351,7 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
             open: tableIsOpen(e),
             label: e.tableLabel,
             orders: ((await allOrdersForEntries([e.id], true)).get(e.id) ?? []).filter((o) => o.kind === "table"),
+            bill: await billForEntry(e),
           }
         : null,
   };

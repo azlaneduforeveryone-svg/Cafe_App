@@ -10,7 +10,7 @@ const fail = (error: string, status: number) => ({ ok: false as const, error, st
 
 function dbFail(message: string | undefined) {
   const m = message ?? "";
-  for (const code of ["not_active", "order_locked", "empty", "too_many_rounds", "too_many", "item_unavailable", "table_closed"]) {
+  for (const code of ["bill_paid", "not_active", "order_locked", "empty", "too_many_rounds", "too_many", "item_unavailable", "table_closed"]) {
     if (m.includes(code)) return fail(code, code === "not_active" ? 404 : 409);
   }
   if (m.includes("violates check constraint")) return fail("invalid", 400);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, BookOpen, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
+import { BillCard } from "./BillCard";
 import { MenuSheet } from "./MenuSheet";
 import { OrderProgress } from "./OrderProgress";
 import { money } from "@/lib/pricing";
@@ -268,13 +269,28 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
           label={data.table.label}
           orders={data.table.orders}
           currency={data.currency}
-          hasMenu={data.hasMenu}
+          hasMenu={data.hasMenu && data.table.bill?.status !== "paid"}
           onOpenMenu={() => setShowMenu(true)}
           onCancel={async () => {
             await fetch(`/api/ticket/${token}/table-order`, { method: "DELETE" }).catch(() => null);
             await refresh();
           }}
         />
+      )}
+
+      {data.table?.bill && (tableOpen || data.table.bill.status === "paid") && (
+        <div className="pb-6">
+          <BillCard
+            t={t}
+            locale={locale}
+            bill={data.table.bill}
+            currency={data.currency}
+            restaurant={data.restaurant}
+            endpoint={`/api/ticket/${token}/bill`}
+            canRequest={tableOpen && data.table.bill.status !== "paid"}
+            onChange={() => void refresh()}
+          />
+        </div>
       )}
 
       {((e.status === "seated" && !tableOpen) || e.status === "no_show" || e.status === "left") && (

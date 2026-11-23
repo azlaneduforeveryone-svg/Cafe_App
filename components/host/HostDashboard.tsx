@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
+import { BillStrip, MarkPaidModal } from "./MarkPaid";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
 import { money } from "@/lib/pricing";
 import { LOCALES, LOCALE_LABELS, type Dict } from "@/lib/i18n";
-import type { HostAction, HostEntry, HostSnapshot, HostTable, Locale, Order } from "@/lib/types";
+import type { HostAction, HostEntry, HostSnapshot, HostTable, Locale, Order, PayMethod } from "@/lib/types";
 
 const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ember";
 
@@ -25,6 +26,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
   const [limitOpen, setLimitOpen] = useState(false);
   const [tab, setTab] = useState<"queue" | "tables">("queue");
   const [seating, setSeating] = useState<HostEntry | null>(null);
+  const [paying, setPaying] = useState<HostTable | null>(null);
   const tables = data.tables ?? [];
   const newTableOrders = tables.reduce((n, tb) => n + tb.orders.filter((o) => o.kind === "table" && o.status === "submitted").length, 0);
   const seenNew = useRef(newTableOrders);
@@ -90,6 +92,14 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
     void refresh();
   }
 
+  async function payAct(tb: HostTable, method: PayMethod) {
+    const res = await fetch("/api/host/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entryId: tb.id, method }) }).catch(() => null);
+    const out = res ? ((await res.json().catch(() => ({}))) as { error?: string; receiptNo?: number }) : {};
+    showToast(res?.ok ? fmt(t.toastPaid, { n: tb.ticketNumber, r: out.receiptNo ?? "" }) : out.error === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric);
+    void refresh();
+    return !!res?.ok;
+  }
+
   const totalGuests = entries.reduce((s, e) => s + e.partySize, 0);
   const atLimit = r.plan === "free" && r.alertsUsed >= r.freeLimit;
   const graceSec = r.gracePeriodMin * 60;
@@ -136,6 +146,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
               now={now}
               onOrder={(tb, id, action) => orderAct(tb, id, action)}
               onTable={tableAct}
+              onPay={setPaying}
             />
           ) : (
           <div className="bg-white rounded-3xl border border-line shadow-xl overflow-hidden">
@@ -342,6 +353,19 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
           </div>
         </aside>
       </div>
+
+      {paying && (
+        <MarkPaidModal
+          t={t}
+          title={fmt(t.markPaidTitleTicket, { n: paying.ticketNumber, name: paying.name })}
+          country={r.country}
+          currency={r.currency}
+          bill={paying.bill?.status === "requested" ? paying.bill : null}
+          fallbackTotal={paying.orders.filter((o) => o.status === "accepted").reduce((n, o) => n + o.total, 0)}
+          onConfirm={(m) => payAct(paying, m)}
+          onClose={() => setPaying(null)}
+        />
+      )}
 
       {seating && (
         <SeatModal
@@ -592,6 +616,7 @@ function TablesPanel({
   now,
   onOrder,
   onTable,
+  onPay,
 }: {
   t: Dict;
   locale: Locale;
@@ -601,6 +626,7 @@ function TablesPanel({
   now: number;
   onOrder: (tb: HostTable, orderId: string, action: "accept" | "cancel" | "served") => void;
   onTable: (tb: HostTable, body: { label?: string; close?: boolean }) => void;
+  onPay: (tb: HostTable) => void;
 }) {
   const [closing, setClosing] = useState<string | null>(null);
   if (!tables.length) {
@@ -665,12 +691,24 @@ function TablesPanel({
                     </button>
                   </span>
                 ) : (
+                  <>
+                  {total > 0 && tb.bill?.status !== "paid" && (
+                    <button type="button" onClick={() => onPay(tb)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">
+                      {t.markPaid}
+                    </button>
+                  )}
                   <button type="button" title={t.closeTableConfirm} onClick={() => setClosing(tb.id)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs font-bold text-stone-600 hover:bg-stone-50">
                     {t.closeTable}
                   </button>
+                  </>
                 )}
               </div>
             </div>
+            {tb.bill && (
+              <div className="mt-3">
+                <BillStrip t={t} bill={tb.bill} currency={currency} />
+              </div>
+            )}
             {tb.orders.map((o) => (
               <OrderPanel
                 key={o.id}

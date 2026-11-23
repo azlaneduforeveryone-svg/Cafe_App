@@ -29,5 +29,7 @@ export const PRICING: Record<
 };
 
 export function money(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  // Whole amounts stay short (SAR 68); fractions always show two places (SAR 74.80, not 74.8).
+  const frac = Math.round(amount * 100) % 100 !== 0;
+  return `${currency} ${amount.toLocaleString("en-US", { minimumFractionDigits: frac ? 2 : 0, maximumFractionDigits: 2 })}`;
 }

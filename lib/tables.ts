@@ -4,7 +4,8 @@ import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { allOrdersForEntries, cartOf, currencyOf, hasMenu, toOrder } from "./menu";
 import { getRestaurantById, toPublic } from "./queue";
-import type { Order, PublicRestaurant, Restaurant, Section } from "./types";
+import { RECEIPT_HOURS, billFor, billSummaries, ratingSince } from "./bills";
+import type { Bill, BillSummary, Order, PublicRestaurant, Restaurant, Section } from "./types";
 
 /**
  * Dining tables, table QR sessions and call-waiter alerts.
@@ -23,7 +24,7 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice
 export const SESSION_HOURS = 8;
 export const cookieName = (tableId: string) => `tp_t_${tableId.replace(/-/g, "")}`;
 
-export type TableStatus = "available" | "ordering" | "eating" | "bill" | "help";
+export type TableStatus = "available" | "ordering" | "eating" | "bill" | "paid" | "help";
 export type AlertType = "water" | "napkins" | "bill" | "help";
 export const ALERT_TYPES: AlertType[] = ["water", "napkins", "bill", "help"];
 
@@ -47,16 +48,18 @@ export interface FloorTable extends DiningTable {
   session: { id: string; openedAt: number; openedBy: "guest" | "staff"; guestName: string; partySize: number | null } | null;
   orders: (Order & { tableNumber: string })[];
   alerts: ServiceAlert[];
+  bill: BillSummary | null;
 }
 export interface FloorSnapshot {
   serverNow: number;
   channel: string;
   currency: string;
+  country: Restaurant["country"];
   sections: Section[];
   tables: FloorTable[];
   /** Waitlist parties that can be seated at a table. */
   waiting: { id: string; ticketNumber: number; name: string; partySize: number; status: string; hasPreOrder: boolean }[];
-  kpis: { activeTables: number; totalTables: number; ordersToday: number; revenueToday: number };
+  kpis: { activeTables: number; totalTables: number; ordersToday: number; revenueToday: number; ratingToday: number | null; ratingsToday: number };
   wifi: { ssid: string; password: string };
 }
 export interface TableGuestSnapshot {
@@ -70,6 +73,8 @@ export interface TableGuestSnapshot {
   wifi: { ssid: string; password: string } | null;
   hasMenu: boolean;
   currency: string;
+  /** The bill (preview, requested or paid). A paid one stays visible after the table closes, for the receipt and rating. */
+  bill: Bill | null;
 }
 
 interface TableRow {
@@ -82,7 +87,7 @@ interface TableRow {
   qr_secret: string;
   sort: number;
 }
-interface SessionRow {
+export interface SessionRow {
   id: string;
   restaurant_id: string;
   table_id: string;
@@ -223,6 +228,23 @@ export async function guestSession(tableId: string): Promise<SessionRow | null> 
   return s && live(s) ? s : null;
 }
 
+/**
+ * The guest's most recent session at this table even after staff closed it, so they can still
+ * open their receipt and rate the visit for a few hours. Ordering always uses guestSession().
+ */
+export async function guestSessionAny(tableId: string): Promise<SessionRow | null> {
+  if (!UUID.test(tableId)) return null;
+  const token = (await cookies()).get(cookieName(tableId))?.value ?? "";
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  const { data } = await adminClient().from("table_sessions").select("*").eq("token", token).eq("table_id", tableId).maybeSingle();
+  const s = data as SessionRow | null;
+  if (!s) return null;
+  return live(s) || Date.parse(s.closed_at ?? s.opened_at) > Date.now() - RECEIPT_HOURS * 3_600_000 ? s : null;
+}
+
+export const isLive = (s: SessionRow) => live(s);
+export const billSourceOf = (s: SessionRow) => ({ restaurantId: s.restaurant_id, sessionId: s.id, entryId: s.entry_id, canRequest: live(s) });
+
 export async function tableWithRestaurant(tableId: string): Promise<{ table: DiningTable; restaurant: Restaurant } | null> {
   if (!UUID.test(tableId)) return null;
   const { data } = await adminClient().from("restaurant_tables").select("*").eq("id", tableId).maybeSingle();
@@ -231,9 +253,12 @@ export async function tableWithRestaurant(tableId: string): Promise<{ table: Din
   return restaurant ? { table: toTable(data as TableRow), restaurant } : null;
 }
 
-export async function guestSnapshot(tableId: string, s: SessionRow | null): Promise<TableGuestSnapshot | null> {
+export async function guestSnapshot(tableId: string, anySession: SessionRow | null): Promise<TableGuestSnapshot | null> {
   const tr = await tableWithRestaurant(tableId);
   if (!tr) return null;
+  // A closed session only shows its paid receipt; everything else needs the table to be open.
+  const bill = anySession ? await billFor(billSourceOf(anySession)) : null;
+  const s = anySession && live(anySession) ? anySession : null;
   const { table, restaurant: r } = tr;
   const db = adminClient();
   const [orders, alerts, rest, menuOn] = await Promise.all([
@@ -254,6 +279,7 @@ export async function guestSnapshot(tableId: string, s: SessionRow | null): Prom
     wifi: wifiRow && wifiRow.wifi_ssid ? { ssid: wifiRow.wifi_ssid, password: wifiRow.wifi_password } : null,
     hasMenu: menuOn,
     currency: currencyOf(r),
+    bill: s || bill?.status === "paid" ? bill : null,
   };
 }
 
@@ -264,7 +290,7 @@ export async function sessionOrder(s: SessionRow, b: Record<string, unknown>): P
     .rpc("tp_session_order", { p_session_id: s.id, p_items: items, p_note: str(b.note, 200), p_hours: SESSION_HOURS })
     .single();
   if (error) {
-    for (const code of ["table_closed", "too_many_rounds", "empty", "too_many", "item_unavailable"]) if (error.message.includes(code)) return fail(code, 409);
+    for (const code of ["bill_paid", "table_closed", "too_many_rounds", "empty", "too_many", "item_unavailable"]) if (error.message.includes(code)) return fail(code, 409);
     return fail("server_error", 500);
   }
   await broadcastChange(s.restaurant_id);
@@ -330,6 +356,7 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
     entryIds.length ? db.from("entries").select("id, name, party_size").in("id", entryIds) : Promise.resolve({ data: [] }),
     allOrdersForEntries(((waiting.data ?? []) as { id: string }[]).map((e) => e.id)),
   ]);
+  const [bills, rating] = await Promise.all([billSummaries(sessIds, []), ratingSince(r.id, startOfBusinessDay(r))]);
   const entryById = new Map(((entriesRes.data ?? []) as { id: string; name: string; party_size: number }[]).map((e) => [e.id, e]));
   const ordersBySession = new Map<string, (Order & { session_id: string })[]>();
   for (const row of (ordersRes.data ?? []) as (Parameters<typeof toOrder>[0] & { session_id: string })[]) {
@@ -346,8 +373,10 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
     const entry = s?.entry_id ? entryById.get(s.entry_id) : undefined;
     let status: TableStatus = "available";
     if (s) {
+      const bill = bills.bySession.get(s.id);
       if (al.some((a) => a.type === "help" || a.type === "water" || a.type === "napkins")) status = "help";
-      else if (al.some((a) => a.type === "bill")) status = "bill";
+      else if (al.some((a) => a.type === "bill") || bill?.status === "requested") status = "bill";
+      else if (bill?.status === "paid") status = "paid";
       else if (orders.some((o) => o.status === "accepted")) status = "eating";
       else status = "ordering";
     }
@@ -359,6 +388,7 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
         : null,
       orders,
       alerts: al,
+      bill: s ? (bills.bySession.get(s.id) ?? null) : null,
     };
   });
   const acc = (today.data ?? []) as { total: string | number }[];
@@ -367,6 +397,7 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
     serverNow: Date.now(),
     channel: r.id,
     currency: currencyOf(r),
+    country: r.country,
     sections: r.sections,
     tables: floor,
     waiting: ((waiting.data ?? []) as { id: string; ticket_number: number; name: string; party_size: number; status: string }[]).map((e) => ({
@@ -382,6 +413,8 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
       totalTables: floor.length,
       ordersToday: acc.length,
       revenueToday: Math.round(acc.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
+      ratingToday: rating.avg,
+      ratingsToday: rating.count,
     },
     wifi: { ssid: wifiRow?.wifi_ssid ?? "", password: wifiRow?.wifi_password ?? "" },
   };
