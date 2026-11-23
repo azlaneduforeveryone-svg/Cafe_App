@@ -232,6 +232,12 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       .limit(100),
   ]);
   const tables = ((seatedRows.data ?? []) as EntryRow[]).map(toEntry);
+  const [allTables, openSessions] = await Promise.all([
+    adminClient().from("restaurant_tables").select("id, table_number, capacity, section_id").eq("restaurant_id", r.id).order("sort").order("table_number"),
+    adminClient().from("table_sessions").select("table_id").eq("restaurant_id", r.id).is("closed_at", null),
+  ]);
+  const busy = new Set(((openSessions.data ?? []) as { table_id: string }[]).map((x) => x.table_id));
+  const diningTables = (allTables.data ?? []) as { id: string; table_number: string; capacity: number; section_id: string }[];
   const [orders, tableOrders] = await Promise.all([ordersForEntries(entries.map((e) => e.id)), allOrdersForEntries(tables.map((e) => e.id))]);
   const closedToday = (closed.data ?? []) as Pick<EntryRow, "status" | "joined_at" | "notified_at" | "closed_at">[];
   const seated = closedToday.filter((e) => e.status === "seated");
@@ -278,6 +284,8 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       label: e.tableLabel,
       orders: tableOrders.get(e.id) ?? [],
     })),
+    freeTables: diningTables.filter((x) => !busy.has(x.id)).map((x) => ({ id: x.id, number: x.table_number, capacity: x.capacity, sectionId: x.section_id })),
+    hasTables: diningTables.length > 0,
     stats: {
       seatedToday: seated.length,
       noShowToday: closedToday.filter((e) => e.status === "no_show").length,

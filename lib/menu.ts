@@ -540,7 +540,10 @@ export async function updateTable(r: Restaurant, entryId: string, b: Record<stri
   if (!data) return fail("not_found", 404);
   if (b.close === true) {
     // Anything still waiting for the kitchen is dropped when the table closes.
-    await adminClient().from("orders").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("entry_id", entryId).eq("status", "submitted");
+    const now = new Date().toISOString();
+    await adminClient().from("orders").update({ status: "cancelled", updated_at: now }).eq("entry_id", entryId).eq("status", "submitted");
+    // Food that was ready has been eaten: mark it served so the guest's progress completes.
+    await adminClient().from("orders").update({ served_at: now, updated_at: now }).eq("entry_id", entryId).eq("status", "accepted").is("served_at", null);
   }
   await broadcastChange(r.id);
   return { ok: true, value: undefined };

@@ -421,6 +421,7 @@ export async function closeTable(r: Restaurant, tableId: string): Promise<Result
   const closed = (data ?? []) as { id: string; entry_id: string | null }[];
   for (const s of closed) {
     await db.from("orders").update({ status: "cancelled", updated_at: now }).eq("session_id", s.id).eq("status", "submitted");
+    await db.from("orders").update({ served_at: now, updated_at: now }).eq("session_id", s.id).eq("status", "accepted").is("served_at", null);
     await db.from("service_alerts").update({ status: "resolved", resolved_at: now }).eq("session_id", s.id).neq("status", "resolved");
     if (s.entry_id) await db.from("entries").update({ table_closed_at: now }).eq("id", s.entry_id);
   }

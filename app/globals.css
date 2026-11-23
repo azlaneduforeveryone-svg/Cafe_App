@@ -35,6 +35,7 @@ body {
 .loc-ur .text-\[10px\] { font-size: 11.5px; }
 .loc-ur .text-\[11px\] { font-size: 12.5px; }
 .loc-ur .text-xs { font-size: 13px; }
+.loc-ur .line-clamp-2 { line-height: 1.95; padding-top: 3px; }
 /* Numbers, prices and Latin text stay in the Latin face inside Urdu. */
 .loc-ur .ltr, .loc-ur input, .loc-ur .font-mono { font-family: var(--font-en); line-height: 1.5; }
 

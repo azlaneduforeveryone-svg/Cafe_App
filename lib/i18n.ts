@@ -540,6 +540,12 @@ const en = {
   kitchenEmpty: "Nothing cooking right now.",
   readyToServe: "Ready to serve",
   markServed: "Served",
+  seatAtTableTitle: "Seat #{n} {name} at",
+  seatSectionFirst: "{section} (guest's choice)",
+  seatOtherTables: "Other free tables",
+  seatNoFree: "No free table in this section.",
+  seatNoTable: "Seat without a table",
+  seatFits: "fits {n}",
 };
 
 export type Dict = typeof en;
@@ -1080,6 +1086,12 @@ const ar: Dict = {
   kitchenEmpty: "لا شيء يُطهى الآن.",
   readyToServe: "جاهز للتقديم",
   markServed: "تم التقديم",
+  seatAtTableTitle: "إجلاس #{n} {name} على",
+  seatSectionFirst: "{section} (اختيار الضيف)",
+  seatOtherTables: "طاولات متاحة أخرى",
+  seatNoFree: "لا توجد طاولة متاحة في هذا القسم.",
+  seatNoTable: "إجلاس بدون طاولة",
+  seatFits: "تتسع لـ {n}",
 };
 
 const ur: Dict = {
@@ -1618,6 +1630,12 @@ const ur: Dict = {
   kitchenEmpty: "ابھی کچھ نہیں پک رہا۔",
   readyToServe: "پیش کرنے کے لیے تیار",
   markServed: "پیش کر دیا",
+  seatAtTableTitle: "#{n} {name} کو بٹھائیں",
+  seatSectionFirst: "{section} (مہمان کی پسند)",
+  seatOtherTables: "دوسری خالی میزیں",
+  seatNoFree: "اس سیکشن میں کوئی خالی میز نہیں۔",
+  seatNoTable: "میز کے بغیر بٹھائیں",
+  seatFits: "{n} کی گنجائش",
 };
 
 const DICTS: Record<Locale, Dict> = { en, ar, ur };

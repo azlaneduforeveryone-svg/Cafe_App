@@ -110,6 +110,9 @@ export interface HostSnapshot {
   stats: { seatedToday: number; noShowToday: number; avgWaitToday: number | null };
   /** Seated parties whose table is still open for ordering. */
   tables: HostTable[];
+  /** Dining tables with no guests right now (empty when the restaurant hasn't set up tables). */
+  freeTables: { id: string; number: string; capacity: number; sectionId: string }[];
+  hasTables: boolean;
 }
 
 export interface HostTable {

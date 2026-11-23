@@ -24,6 +24,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
   const [walkIn, setWalkIn] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
   const [tab, setTab] = useState<"queue" | "tables">("queue");
+  const [seating, setSeating] = useState<HostEntry | null>(null);
   const tables = data.tables ?? [];
   const newTableOrders = tables.reduce((n, tb) => n + tb.orders.filter((o) => o.kind === "table" && o.status === "submitted").length, 0);
   const seenNew = useRef(newTableOrders);
@@ -68,14 +69,14 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
     setPending(null);
   }
 
-  async function orderAct(e: { ticketNumber: number }, orderId: string | undefined, action: "accept" | "cancel") {
+  async function orderAct(e: { ticketNumber: number }, orderId: string | undefined, action: "accept" | "cancel" | "served") {
     if (!orderId) return;
     const res = await fetch(`/api/host/orders/${orderId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     }).catch(() => null);
-    showToast(res?.ok ? fmt(action === "accept" ? t.toastOrderAccepted : t.toastOrderCancelled, { n: e.ticketNumber }) : t.errorGeneric);
+    showToast(res?.ok ? (action === "served" ? `#${e.ticketNumber} ${t.stage_served}` : fmt(action === "accept" ? t.toastOrderAccepted : t.toastOrderCancelled, { n: e.ticketNumber })) : t.errorGeneric);
     void refresh();
   }
 
@@ -266,7 +267,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                           <button
                             type="button"
                             disabled={pending === e.id}
-                            onClick={() => act(e, "seat")}
+                            onClick={() => (data.hasTables ? setSeating(e) : act(e, "seat"))}
                             className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold disabled:opacity-60"
                           >
                             {t.seat}
@@ -341,6 +342,33 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
           </div>
         </aside>
       </div>
+
+      {seating && (
+        <SeatModal
+          t={t}
+          locale={locale}
+          entry={seating}
+          tables={data.freeTables ?? []}
+          sections={r.sections}
+          onClose={() => setSeating(null)}
+          onNoTable={async () => {
+            const e = seating;
+            setSeating(null);
+            await act(e, "seat");
+          }}
+          onPick={async (tableId) => {
+            const e = seating;
+            setSeating(null);
+            const res = await fetch(`/api/host/floor/tables/${tableId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "seat", entryId: e.id }),
+            }).catch(() => null);
+            showToast(res?.ok ? fmt(t.toastSeated, { n: e.ticketNumber }) : res?.status === 409 ? t.errTableBusy : t.errorGeneric);
+            void refresh();
+          }}
+        />
+      )}
 
       {walkIn && (
         <WalkInModal
@@ -499,9 +527,9 @@ function OrderPanel({
   order: Order;
   currency: string;
   title?: string;
-  onAction: (action: "accept" | "cancel") => void;
+  onAction: (action: "accept" | "cancel" | "served") => void;
 }) {
-  const [open, setOpen] = useState(order.status === "submitted");
+  const [open, setOpen] = useState(order.status === "submitted" || (!!order.readyAt && !order.servedAt));
   const count = order.items.reduce((n, l) => n + l.qty, 0);
   const accepted = order.status === "accepted";
   return (
@@ -511,7 +539,9 @@ function OrderPanel({
           <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
           {title ?? t.preOrder}
           <span className="font-semibold text-stone-600">{fmt(t.preOrderSummary, { n: count, total: money(order.total, currency) })}</span>
-          {accepted && <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold">{t.orderAccepted}</span>}
+          {accepted && !order.readyAt && <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold">{t.orderAccepted}</span>}
+          {order.readyAt && !order.servedAt && <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold animate-pulse">{t.readyToServe}</span>}
+          {order.servedAt && <span className="px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 text-[10px] font-extrabold">{t.stage_served}</span>}
         </span>
         <ChevronDown className={`w-4 h-4 text-stone-500 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
@@ -536,6 +566,11 @@ function OrderPanel({
             <button type="button" onClick={() => onAction("cancel")} className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
               {t.cancelOrder}
             </button>
+            {accepted && !order.servedAt && (
+              <button type="button" onClick={() => onAction("served")} className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-extrabold">
+                {t.markServed} ✓
+              </button>
+            )}
             {!accepted && (
               <button type="button" onClick={() => onAction("accept")} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
                 {t.acceptOrder}
@@ -564,7 +599,7 @@ function TablesPanel({
   sections: HostSnapshot["restaurant"]["sections"];
   currency: string;
   now: number;
-  onOrder: (tb: HostTable, orderId: string, action: "accept" | "cancel") => void;
+  onOrder: (tb: HostTable, orderId: string, action: "accept" | "cancel" | "served") => void;
   onTable: (tb: HostTable, body: { label?: string; close?: boolean }) => void;
 }) {
   const [closing, setClosing] = useState<string | null>(null);
@@ -651,5 +686,75 @@ function TablesPanel({
         );
       })}
     </ul>
+  );
+}
+
+/** Pick a free table: the guest's chosen section first, best fit for the party size at the top. */
+function SeatModal({
+  t,
+  locale,
+  entry,
+  tables,
+  sections,
+  onClose,
+  onPick,
+  onNoTable,
+}: {
+  t: Dict;
+  locale: Locale;
+  entry: HostEntry;
+  tables: HostSnapshot["freeTables"];
+  sections: HostSnapshot["restaurant"]["sections"];
+  onClose: () => void;
+  onPick: (tableId: string) => void;
+  onNoTable: () => void;
+}) {
+  // Tables big enough come first, smallest fitting table first; then too-small ones.
+  const fit = (a: { capacity: number }, b: { capacity: number }) => {
+    const fa = a.capacity >= entry.partySize ? 0 : 1;
+    const fb = b.capacity >= entry.partySize ? 0 : 1;
+    return fa - fb || (fa === 0 ? a.capacity - b.capacity : b.capacity - a.capacity);
+  };
+  const mine = tables.filter((x) => x.sectionId === entry.sectionId).sort(fit);
+  const others = tables.filter((x) => x.sectionId !== entry.sectionId).sort(fit);
+  const btn = (x: HostSnapshot["freeTables"][number], highlight: boolean) => (
+    <button
+      key={x.id}
+      type="button"
+      onClick={() => onPick(x.id)}
+      className={`p-3 rounded-2xl border-2 text-start hover:border-ember ${highlight && x.capacity >= entry.partySize ? "border-emerald-400 bg-emerald-50/60" : "border-line bg-white"}`}
+    >
+      <span className="block text-xl font-extrabold">{x.number}</span>
+      <span className={`block text-[11px] font-bold ${x.capacity >= entry.partySize ? "text-emerald-700" : "text-amber-700"}`}>
+        <Users className="inline w-3 h-3 me-0.5" aria-hidden />
+        {fmt(t.seatFits, { n: x.capacity })}
+      </span>
+      {!highlight && x.sectionId && <span className="block text-[10px] text-stone-500">{sectionName(sections, x.sectionId, locale)}</span>}
+    </button>
+  );
+  return (
+    <Modal title={fmt(t.seatAtTableTitle, { n: entry.ticketNumber, name: entry.name })} onClose={onClose} closeLabel={t.close}>
+      <div className="space-y-4">
+        <p className="text-xs text-stone-500 flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5" aria-hidden />
+          {entry.partySize}
+        </p>
+        <section>
+          <h3 className="text-xs font-extrabold text-stone-600 mb-2">{fmt(t.seatSectionFirst, { section: sectionName(sections, entry.sectionId, locale) })}</h3>
+          {mine.length ? <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{mine.map((x) => btn(x, true))}</div> : <p className="text-sm text-stone-500">{t.seatNoFree}</p>}
+        </section>
+        {others.length > 0 && (
+          <section>
+            <h3 className="text-xs font-extrabold text-stone-600 mb-2">{t.seatOtherTables}</h3>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{others.map((x) => btn(x, false))}</div>
+          </section>
+        )}
+        <div className="flex justify-end pt-1">
+          <button type="button" onClick={onNoTable} className="px-3 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100">
+            {t.seatNoTable}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
