@@ -3,10 +3,11 @@ import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
 import { publicUrl } from "./media";
-import { cancelOpenOrder, currencyOf, hasMenu, orderForEntry, ordersForEntries } from "./menu";
+import { allOrdersForEntries, cancelOpenOrder, currencyOf, hasMenu, orderForEntry, ordersForEntries, TABLE_HOURS, tableIsOpen } from "./menu";
 import type {
   Country,
   Entry,
+  MealPeriod,
   GuestAction,
   HostAction,
   HostSnapshot,
@@ -47,6 +48,7 @@ interface RestaurantRow {
   now_serving: number;
   created_at: string;
   logo_path: string | null;
+  meal_periods?: MealPeriod[] | null;
 }
 
 interface EntryRow {
@@ -66,6 +68,8 @@ interface EntryRow {
   notified_at: string | null;
   notify_count: number;
   closed_at: string | null;
+  table_label?: string;
+  table_closed_at?: string | null;
 }
 
 const ms = (t: string | null) => (t ? Date.parse(t) : null);
@@ -96,6 +100,7 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     nowServing: row.now_serving,
     createdAt: Date.parse(row.created_at),
     logoPath: row.logo_path ?? null,
+    mealPeriods: Array.isArray(row.meal_periods) ? row.meal_periods : [],
   };
 }
 
@@ -117,6 +122,8 @@ function toEntry(row: EntryRow): Entry {
     notifiedAt: ms(row.notified_at),
     notifyCount: row.notify_count,
     closedAt: ms(row.closed_at),
+    tableLabel: row.table_label ?? "",
+    tableClosedAt: ms(row.table_closed_at ?? null),
   };
 }
 
@@ -204,15 +211,25 @@ function startOfToday(country: Country) {
 
 export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
   const since = new Date(startOfToday(r.country)).toISOString();
-  const [entries, closed] = await Promise.all([
+  const [entries, closed, seatedRows] = await Promise.all([
     activeEntries(r.id),
     adminClient()
       .from("entries")
       .select("status, joined_at, notified_at, closed_at")
       .eq("restaurant_id", r.id)
       .gte("closed_at", since),
+    adminClient()
+      .from("entries")
+      .select("*")
+      .eq("restaurant_id", r.id)
+      .eq("status", "seated")
+      .is("table_closed_at", null)
+      .gte("closed_at", new Date(Date.now() - TABLE_HOURS * 3_600_000).toISOString())
+      .order("closed_at", { ascending: false })
+      .limit(100),
   ]);
-  const orders = await ordersForEntries(entries.map((e) => e.id));
+  const tables = ((seatedRows.data ?? []) as EntryRow[]).map(toEntry);
+  const [orders, tableOrders] = await Promise.all([ordersForEntries(entries.map((e) => e.id)), allOrdersForEntries(tables.map((e) => e.id))]);
   const closedToday = (closed.data ?? []) as Pick<EntryRow, "status" | "joined_at" | "notified_at" | "closed_at">[];
   const seated = closedToday.filter((e) => e.status === "seated");
   const avgWaitToday = seated.length
@@ -247,6 +264,16 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
       joinedAt: e.joinedAt,
       notifiedAt: e.notifiedAt,
       order: orders.get(e.id) ?? null,
+    })),
+    tables: tables.map((e) => ({
+      id: e.id,
+      ticketNumber: e.ticketNumber,
+      name: e.name,
+      partySize: e.partySize,
+      sectionId: e.sectionId,
+      seatedAt: e.closedAt ?? e.joinedAt,
+      label: e.tableLabel,
+      orders: tableOrders.get(e.id) ?? [],
     })),
     stats: {
       seatedToday: seated.length,
@@ -301,6 +328,14 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
     currency: currencyOf(r),
     order: await orderForEntry(e.id),
     hasMenu: await hasMenu(r.id),
+    table:
+      e.status === "seated"
+        ? {
+            open: tableIsOpen(e),
+            label: e.tableLabel,
+            orders: ((await allOrdersForEntries([e.id], true)).get(e.id) ?? []).filter((o) => o.kind === "table"),
+          }
+        : null,
   };
 }
 

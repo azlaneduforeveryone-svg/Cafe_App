@@ -10,14 +10,18 @@ import type { Locale, Menu, MenuItem, Order } from "@/lib/types";
 type Cart = Record<string, number>;
 
 /**
- * Full-screen menu over the ticket. Guests add dishes, review, and send a pre-order.
- * Once the restaurant accepts the order, the menu is view-only.
+ * Full-screen menu over the ticket. Guests add dishes, review and send:
+ *   mode "pre":   a pre-order while waiting (view-only once the restaurant accepts it)
+ *   mode "table": an order from the table after being seated; `order` is the round still
+ *                 waiting for the restaurant, if any (sending again updates it)
+ * Sold-out dishes are shown but can't be added.
  */
 export function MenuSheet({
   t,
   locale,
   token,
   order,
+  mode = "pre",
   onClose,
   onSent,
 }: {
@@ -25,10 +29,11 @@ export function MenuSheet({
   locale: Locale;
   token: string;
   order: Order | null;
+  mode?: "pre" | "table";
   onClose: () => void;
   onSent: () => void;
 }) {
-  const readOnly = order?.status === "accepted";
+  const readOnly = mode === "pre" && order?.status === "accepted";
   const [menu, setMenu] = useState<Menu | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [cart, setCart] = useState<Cart>(() =>
@@ -73,7 +78,7 @@ export function MenuSheet({
 
   const byId = useMemo(() => new Map((menu?.items ?? []).map((i) => [i.id, i])), [menu]);
   const lines = Object.entries(cart)
-    .filter(([id, q]) => q > 0 && byId.has(id))
+    .filter(([id, q]) => q > 0 && byId.has(id) && byId.get(id)!.inStock)
     .map(([id, qty]) => ({ item: byId.get(id)!, qty }));
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const total = lines.reduce((s, l) => s + l.qty * l.item.price, 0);
@@ -84,7 +89,7 @@ export function MenuSheet({
   async function submit() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/ticket/${encodeURIComponent(token)}/order`, {
+    const res = await fetch(`/api/ticket/${encodeURIComponent(token)}/${mode === "table" ? "table-order" : "order"}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: lines.map((l) => ({ id: l.item.id, qty: l.qty })), note }),
@@ -101,6 +106,7 @@ export function MenuSheet({
       await load();
       setStep("menu");
     } else if (out.error === "order_locked") setError(t.orderLocked);
+    else if (out.error === "table_closed") setError(t.tableClosedBody);
     else setError(t.errorGeneric);
   }
 
@@ -184,7 +190,7 @@ export function MenuSheet({
                   className="w-full px-3 py-2.5 rounded-xl bg-white border border-line text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ember"
                 />
               </label>
-              <p className="text-xs text-stone-500">{t.preOrderInfo}</p>
+              <p className="text-xs text-stone-500">{mode === "table" ? t.tableOrderInfo : t.preOrderInfo}</p>
             </div>
           )}
         </div>
@@ -202,7 +208,16 @@ export function MenuSheet({
                 {fmt(t.itemsCount, { n: count })}
               </span>
               <span>
-                {step === "menu" ? t.reviewOrder : order?.status === "submitted" ? t.updatePreOrder : t.sendPreOrder} ·{" "}
+                {step === "menu"
+                  ? t.reviewOrder
+                  : mode === "table"
+                    ? order?.status === "submitted"
+                      ? t.updateTableOrder
+                      : t.sendTableOrder
+                    : order?.status === "submitted"
+                      ? t.updatePreOrder
+                      : t.sendPreOrder}{" "}
+                ·{" "}
                 <span className="ltr">{money(total, currency)}</span>
               </span>
             </button>
@@ -243,7 +258,7 @@ function ItemCard({
   onQty: (q: number) => void;
 }) {
   return (
-    <article className={`bg-white rounded-2xl border overflow-hidden ${item.isDeal ? "border-gold" : "border-line"}`}>
+    <article className={`bg-white rounded-2xl border overflow-hidden ${item.isDeal ? "border-gold" : "border-line"} ${item.inStock ? "" : "opacity-60"}`}>
       {item.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.imageUrl} alt="" loading="lazy" className="w-full h-40 object-cover bg-cream" />
@@ -267,7 +282,9 @@ function ItemCard({
               <span className="font-extrabold text-ember ltr">{money(item.price, currency)}</span>
               {item.compareAtPrice && <span className="text-xs text-stone-400 line-through ltr">{money(item.compareAtPrice, currency)}</span>}
             </span>
-            {!readOnly &&
+            {!item.inStock ? (
+              <span className="px-2 py-1 rounded-lg text-[11px] font-extrabold bg-red-100 text-red-800">{t.soldOut}</span>
+            ) : !readOnly &&
               (qty > 0 ? (
                 <Stepper qty={qty} onQty={onQty} t={t} />
               ) : (

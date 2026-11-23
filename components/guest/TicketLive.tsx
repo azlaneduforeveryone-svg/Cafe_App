@@ -9,7 +9,7 @@ import { GuestFrame } from "./GuestFrame";
 import { ticketKey } from "./JoinForm";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
-import { fmt, mmss, restaurantName, sectionName } from "@/lib/format";
+import { fmt, mmss, sectionName, tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Order, TicketSnapshot } from "@/lib/types";
 
@@ -47,16 +47,19 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
     lastBuzz.current = e.notifyCount;
   }, [e.notifyCount, t.readyTitle, t.readySub, token]);
 
-  // Closed tickets no longer need to be remembered on this phone.
+  const tableOpen = e.status === "seated" && !!data.table?.open;
+
+  // Closed tickets no longer need to be remembered on this phone (a seated guest keeps it
+  // while the table is open, to order more).
   useEffect(() => {
-    if (e.status === "seated" || e.status === "no_show" || e.status === "left") {
+    if ((e.status === "seated" && !tableOpen) || e.status === "no_show" || e.status === "left") {
       try {
         localStorage.removeItem(ticketKey(slug));
       } catch {}
       void wakeLock.current?.release().catch(() => {});
       wakeLock.current = null;
     }
-  }, [e.status, slug]);
+  }, [e.status, slug, tableOpen]);
 
   // Screen wake lock is dropped when the tab is hidden; take it back on return.
   useEffect(() => {
@@ -257,14 +260,30 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
         </div>
       )}
 
-      {(e.status === "seated" || e.status === "no_show" || e.status === "left") && (
+      {tableOpen && data.table && (
+        <TableCard
+          t={t}
+          locale={locale}
+          label={data.table.label}
+          orders={data.table.orders}
+          currency={data.currency}
+          hasMenu={data.hasMenu}
+          onOpenMenu={() => setShowMenu(true)}
+          onCancel={async () => {
+            await fetch(`/api/ticket/${token}/table-order`, { method: "DELETE" }).catch(() => null);
+            await refresh();
+          }}
+        />
+      )}
+
+      {((e.status === "seated" && !tableOpen) || e.status === "no_show" || e.status === "left") && (
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 py-10">
           <span className="w-16 h-16 rounded-full bg-white border border-line flex items-center justify-center shadow-sm">
             {e.status === "seated" ? <Utensils className="w-7 h-7 text-ember" aria-hidden /> : <Clock className="w-7 h-7 text-stone-500" aria-hidden />}
           </span>
-          <h1 className="display text-2xl font-bold">{e.status === "seated" ? t.seatedTitle : e.status === "no_show" ? t.noShowTitle : t.leftTitle}</h1>
+          <h1 className="display text-2xl font-bold">{e.status === "seated" ? t.tableClosedTitle : e.status === "no_show" ? t.noShowTitle : t.leftTitle}</h1>
           <p className="text-sm text-stone-600 max-w-xs">
-            {e.status === "seated" ? fmt(t.seatedBody, { name: restaurantName(r, locale) }) : e.status === "no_show" ? t.noShowBody : t.leftBody}
+            {e.status === "seated" ? t.tableClosedBody : e.status === "no_show" ? t.noShowBody : t.leftBody}
           </p>
           {e.status !== "seated" && (
             <Link href={`/r/${slug}`} className="px-5 py-3 rounded-2xl bg-ember hover:bg-ember-dark text-white font-extrabold text-sm shadow-lg">
@@ -278,7 +297,8 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
           t={t}
           locale={locale}
           token={token}
-          order={data.order}
+          mode={tableOpen ? "table" : "pre"}
+          order={tableOpen ? (data.table?.orders.find((o) => o.status === "submitted") ?? null) : data.order}
           onClose={() => setShowMenu(false)}
           onSent={() => void refresh()}
         />
@@ -344,6 +364,81 @@ function OrderCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function TableCard({
+  t,
+  locale,
+  label,
+  orders,
+  currency,
+  hasMenu,
+  onOpenMenu,
+  onCancel,
+}: {
+  t: Dict;
+  locale: Locale;
+  label: string;
+  orders: Order[];
+  currency: string;
+  hasMenu: boolean;
+  onOpenMenu: () => void;
+  onCancel: () => void;
+}) {
+  const pending = orders.find((o) => o.status === "submitted");
+  const shown = orders.filter((o) => o.status !== "cancelled" || o === orders[orders.length - 1]);
+  return (
+    <div className="flex-1 flex flex-col gap-4 py-4">
+      <div className="text-center space-y-2">
+        <span className="mx-auto w-14 h-14 rounded-full bg-white border border-line flex items-center justify-center shadow-sm">
+          <Utensils className="w-6 h-6 text-ember" aria-hidden />
+        </span>
+        <h1 className="display text-2xl font-bold">{t.tableOrderTitle}</h1>
+        {label && <p className="text-sm font-extrabold text-ember">{fmt(t.tableLabelShow, { t: label })}</p>}
+        <p className="text-sm text-stone-600">{t.tableOrderBody}</p>
+      </div>
+
+      {shown.length > 0 && (
+        <ul className="space-y-2">
+          {shown.map((o) => {
+            const accepted = o.status === "accepted";
+            const cancelled = o.status === "cancelled";
+            return (
+              <li key={o.id} className={`p-3.5 rounded-2xl border ${accepted ? "bg-emerald-50 border-emerald-300" : cancelled ? "bg-white border-line opacity-60" : "bg-white border-gold"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-extrabold flex items-center gap-1.5">
+                    <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
+                    {fmt(t.roundN, { n: o.round })}
+                  </span>
+                  <span className="text-xs font-extrabold ltr">{money(o.total, currency)}</span>
+                </div>
+                <p className={`text-xs font-bold mt-1 ${accepted ? "text-emerald-800" : cancelled ? "text-stone-500" : "text-amber-800"}`}>
+                  {accepted ? t.statusAccepted : cancelled ? t.statusCancelled : t.statusSubmitted} · {fmt(t.itemsCount, { n: o.items.reduce((n, l) => n + l.qty, 0) })}
+                </p>
+                <p className="text-[11px] text-stone-500 mt-1">{o.items.map((l) => `${l.qty}× ${tr(l, "name", locale)}`).join(locale === "en" ? ", " : "، ")}</p>
+                {o === pending && (
+                  <button type="button" onClick={onCancel} className="mt-2 text-[11px] font-bold text-stone-500 hover:text-red-700 underline">
+                    {t.cancelTableOrder}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {hasMenu && (
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="w-full py-3.5 px-3 rounded-2xl bg-ember hover:bg-ember-dark text-white text-sm font-extrabold flex items-center justify-center gap-2 shadow-lg"
+        >
+          <BookOpen className="w-4 h-4" aria-hidden />
+          {pending ? t.updateTableOrder : t.orderMore}
+        </button>
+      )}
     </div>
   );
 }

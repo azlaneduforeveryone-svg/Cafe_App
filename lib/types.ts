@@ -28,6 +28,7 @@ export interface Restaurant {
   basePlan: Plan;
   proUntil: number | null;
   trialEndsAt: number | null;
+  mealPeriods: MealPeriod[];
   alertsUsed: number;
   alertsPeriod: string; // YYYY-MM, free alerts reset when it changes
   nextTicket: number;
@@ -61,6 +62,8 @@ export interface Entry {
   notifiedAt: number | null;
   notifyCount: number;
   closedAt: number | null;
+  tableLabel: string;
+  tableClosedAt: number | null;
 }
 
 /** Restaurant fields that are safe to send to guests. */
@@ -104,6 +107,20 @@ export interface HostSnapshot {
   };
   entries: HostEntry[];
   stats: { seatedToday: number; noShowToday: number; avgWaitToday: number | null };
+  /** Seated parties whose table is still open for ordering. */
+  tables: HostTable[];
+}
+
+export interface HostTable {
+  id: string;
+  ticketNumber: number;
+  name: string;
+  partySize: number;
+  sectionId: string;
+  seatedAt: number;
+  label: string;
+  /** Pre-order (if any) and every round ordered at the table, oldest first. */
+  orders: Order[];
 }
 
 export interface TicketSnapshot {
@@ -129,6 +146,8 @@ export interface TicketSnapshot {
   currency: string;
   order: Order | null;
   hasMenu: boolean;
+  /** Present after the guest is seated. */
+  table: { open: boolean; label: string; orders: Order[] } | null;
 }
 
 export interface MenuCategory {
@@ -137,6 +156,20 @@ export interface MenuCategory {
   nameAr: string;
   nameUr: string;
   sort: number;
+  /** Bitmask Mon 1 ... Sun 64; 127 = every day. */
+  days: number;
+  /** Meal time ids; empty = all day. */
+  periods: string[];
+}
+
+/** A named time window set by the restaurant, e.g. Lunch 12:00-16:00. May cross midnight. */
+export interface MealPeriod {
+  id: string;
+  en: string;
+  ar: string;
+  ur: string;
+  start: string; // HH:MM
+  end: string; // HH:MM
 }
 
 export interface MenuItem {
@@ -154,11 +187,19 @@ export interface MenuItem {
   imagePath: string | null;
   imageUrl: string | null;
   available: boolean;
+  /** When sold out "until tomorrow": the time it comes back by itself. */
+  backAt: number | null;
+  days: number;
+  periods: string[];
+  /** Worked out by the database for right now. */
+  inStock: boolean;
+  onSchedule: boolean;
   sort: number;
 }
 
 export interface Menu {
   currency: string;
+  mealPeriods: MealPeriod[];
   categories: MenuCategory[];
   items: MenuItem[];
 }
@@ -176,9 +217,12 @@ export interface OrderLine {
 
 export interface Order {
   id: string;
+  kind: "pre" | "table";
+  round: number;
   status: OrderStatus;
   items: OrderLine[];
   total: number;
   note: string;
+  createdAt: number;
   updatedAt: number;
 }

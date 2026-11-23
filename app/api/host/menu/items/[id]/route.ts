@@ -1,15 +1,25 @@
 import { fail, json, readBody, withStaff } from "@/lib/api";
-import { deleteItem, setItemAvailable, updateItem } from "@/lib/menu";
+import { deleteItem, setItemStock, updateItem, type StockMode } from "@/lib/menu";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Full update, or { available: true|false } alone for a quick show/hide. */
+const MODES: StockMode[] = ["in", "out_today", "out"];
+
+/**
+ * Full update, or a stock change alone:
+ *   { stock: "in" | "out_today" | "out" }   (out_today comes back by itself at 4 AM)
+ *   { available: true | false }            (older screens: same as "in" / "out")
+ * A full update never changes stock.
+ */
 export async function PUT(req: Request, { params }: Ctx) {
   const { id } = await params;
   const body = await readBody(req);
   return withStaff(async ({ restaurant }) => {
-    const onlyAvailability = Object.keys(body).length === 1 && typeof body.available === "boolean";
-    const res = onlyAvailability ? await setItemAvailable(restaurant, id, body.available as boolean) : await updateItem(restaurant, id, body);
+    const keys = Object.keys(body);
+    let res;
+    if (keys.length === 1 && MODES.includes(body.stock as StockMode)) res = await setItemStock(restaurant, id, body.stock as StockMode);
+    else if (keys.length === 1 && typeof body.available === "boolean") res = await setItemStock(restaurant, id, body.available ? "in" : "out");
+    else res = await updateItem(restaurant, id, body);
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   });
 }

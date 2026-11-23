@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users } from "lucide-react";
+import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
 import { money } from "@/lib/pricing";
 import { LOCALES, LOCALE_LABELS, type Dict } from "@/lib/i18n";
-import type { HostAction, HostEntry, HostSnapshot, Locale, Order } from "@/lib/types";
+import type { HostAction, HostEntry, HostSnapshot, HostTable, Locale, Order } from "@/lib/types";
 
 const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ember";
 
@@ -23,6 +23,15 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
   const [pending, setPending] = useState<string | null>(null);
   const [walkIn, setWalkIn] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
+  const [tab, setTab] = useState<"queue" | "tables">("queue");
+  const tables = data.tables ?? [];
+  const newTableOrders = tables.reduce((n, tb) => n + tb.orders.filter((o) => o.kind === "table" && o.status === "submitted").length, 0);
+  const seenNew = useRef(newTableOrders);
+  // A chime when a seated guest sends a new order from the table.
+  useEffect(() => {
+    if (newTableOrders > seenNew.current) playChime();
+    seenNew.current = newTableOrders;
+  }, [newTableOrders]);
 
   const router = useRouter();
   // Logged out (or session expired): back to the login page.
@@ -59,14 +68,24 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
     setPending(null);
   }
 
-  async function orderAct(e: HostEntry, action: "accept" | "cancel") {
-    if (!e.order) return;
-    const res = await fetch(`/api/host/orders/${e.order.id}`, {
+  async function orderAct(e: { ticketNumber: number }, orderId: string | undefined, action: "accept" | "cancel") {
+    if (!orderId) return;
+    const res = await fetch(`/api/host/orders/${orderId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     }).catch(() => null);
     showToast(res?.ok ? fmt(action === "accept" ? t.toastOrderAccepted : t.toastOrderCancelled, { n: e.ticketNumber }) : t.errorGeneric);
+    void refresh();
+  }
+
+  async function tableAct(tb: HostTable, body: { label?: string; close?: boolean }) {
+    const res = await fetch(`/api/host/tables/${tb.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => null);
+    if (!res?.ok) showToast(t.errorGeneric);
     void refresh();
   }
 
@@ -79,6 +98,45 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
       <div className="grid gap-6 lg:grid-cols-12 items-start">
         {/* Queue */}
         <section className="lg:col-span-8 space-y-4" aria-label={t.liveQueue}>
+          <div role="tablist" className="inline-flex bg-white border border-line rounded-2xl p-1 shadow-sm">
+            {(
+              [
+                ["queue", t.queueTab, entries.length, LayoutList],
+                ["tables", t.tablesTab, tables.length, UtensilsCrossed],
+              ] as const
+            ).map(([key, label, n, Icon]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`relative px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ${tab === key ? "bg-ink text-white" : "text-stone-600 hover:text-ink"}`}
+              >
+                <Icon className="w-4 h-4" aria-hidden />
+                {label}
+                <span className={`px-1.5 rounded-full text-[10px] ${tab === key ? "bg-white/20" : "bg-stone-100"}`}>{n}</span>
+                {key === "tables" && newTableOrders > 0 && (
+                  <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
+                    {newTableOrders}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {tab === "tables" ? (
+            <TablesPanel
+              t={t}
+              locale={locale}
+              tables={tables}
+              sections={r.sections}
+              currency={r.currency}
+              now={now}
+              onOrder={(tb, id, action) => orderAct(tb, id, action)}
+              onTable={tableAct}
+            />
+          ) : (
           <div className="bg-white rounded-3xl border border-line shadow-xl overflow-hidden">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-cream border-b border-line">
               <Kpi label={t.waitingParties} value={entries.length} />
@@ -229,7 +287,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                             locale={locale}
                             order={e.order}
                             currency={r.currency}
-                            onAction={(action) => orderAct(e, action)}
+                            onAction={(action) => orderAct(e, e.order?.id, action)}
                           />
                         )}
                       </li>
@@ -239,6 +297,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
               )}
             </div>
           </div>
+          )}
         </section>
 
         {/* Side panel */}
@@ -432,12 +491,14 @@ function OrderPanel({
   locale,
   order,
   currency,
+  title,
   onAction,
 }: {
   t: Dict;
   locale: Locale;
   order: Order;
   currency: string;
+  title?: string;
   onAction: (action: "accept" | "cancel") => void;
 }) {
   const [open, setOpen] = useState(order.status === "submitted");
@@ -448,7 +509,7 @@ function OrderPanel({
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full px-3 py-2 flex items-center justify-between gap-2 text-start">
         <span className="flex items-center gap-2 text-xs font-extrabold text-ink">
           <ShoppingBag className="w-4 h-4 text-ember" aria-hidden />
-          {t.preOrder}
+          {title ?? t.preOrder}
           <span className="font-semibold text-stone-600">{fmt(t.preOrderSummary, { n: count, total: money(order.total, currency) })}</span>
           {accepted && <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold">{t.orderAccepted}</span>}
         </span>
@@ -484,5 +545,111 @@ function OrderPanel({
         </div>
       )}
     </div>
+  );
+}
+
+function TablesPanel({
+  t,
+  locale,
+  tables,
+  sections,
+  currency,
+  now,
+  onOrder,
+  onTable,
+}: {
+  t: Dict;
+  locale: Locale;
+  tables: HostTable[];
+  sections: HostSnapshot["restaurant"]["sections"];
+  currency: string;
+  now: number;
+  onOrder: (tb: HostTable, orderId: string, action: "accept" | "cancel") => void;
+  onTable: (tb: HostTable, body: { label?: string; close?: boolean }) => void;
+}) {
+  const [closing, setClosing] = useState<string | null>(null);
+  if (!tables.length) {
+    return <div className="bg-white rounded-3xl border border-line shadow-xl p-10 text-center text-sm text-stone-500">{t.noTables}</div>;
+  }
+  // Tables with an order waiting for the kitchen first.
+  const sorted = [...tables].sort((a, b) => {
+    const pa = a.orders.some((o) => o.status === "submitted") ? 1 : 0;
+    const pb = b.orders.some((o) => o.status === "submitted") ? 1 : 0;
+    return pb - pa || b.seatedAt - a.seatedAt;
+  });
+  return (
+    <ul className="space-y-3">
+      {sorted.map((tb) => {
+        const waiting = tb.orders.some((o) => o.status === "submitted");
+        const total = tb.orders.filter((o) => o.status === "accepted").reduce((s, o) => s + o.total, 0);
+        return (
+          <li key={tb.id} className={`bg-white rounded-3xl border shadow-sm p-4 ${waiting ? "border-gold ring-2 ring-gold/40" : "border-line"}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-extrabold text-sm flex flex-wrap items-center gap-2">
+                  <span className="ltr text-ember">#{tb.ticketNumber}</span>
+                  <span className="truncate">{tb.name}</span>
+                  {waiting && <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-extrabold">{t.newOrder}</span>}
+                </p>
+                <p className="text-[11px] text-stone-500 mt-0.5 flex flex-wrap gap-x-3">
+                  <span className="inline-flex items-center gap-1">
+                    <Users className="w-3 h-3" aria-hidden />
+                    {tb.partySize}
+                  </span>
+                  <span>{sectionName(sections, tb.sectionId, locale)}</span>
+                  <span suppressHydrationWarning>{fmt(t.seatedMinAgo, { m: Math.max(0, Math.round((now - tb.seatedAt) / 60_000)) })}</span>
+                  {total > 0 && <span className="font-bold text-ink ltr">{fmt(t.tableTotal, { v: money(total, currency) })}</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500">
+                  {t.tableNo}
+                  <input
+                    key={tb.label}
+                    defaultValue={tb.label}
+                    maxLength={12}
+                    onBlur={(ev) => ev.target.value.trim() !== tb.label && onTable(tb, { label: ev.target.value.trim() })}
+                    onKeyDown={(ev) => ev.key === "Enter" && (ev.target as HTMLInputElement).blur()}
+                    className="w-16 px-2 py-1.5 rounded-lg border border-line text-sm font-extrabold text-ink text-center"
+                  />
+                </label>
+                {closing === tb.id ? (
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClosing(null);
+                        onTable(tb, { close: true });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold"
+                    >
+                      {t.closeTable}
+                    </button>
+                    <button type="button" onClick={() => setClosing(null)} className="px-2 py-1.5 rounded-lg text-xs font-bold text-stone-500 hover:bg-stone-100">
+                      {t.cancel}
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" title={t.closeTableConfirm} onClick={() => setClosing(tb.id)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs font-bold text-stone-600 hover:bg-stone-50">
+                    {t.closeTable}
+                  </button>
+                )}
+              </div>
+            </div>
+            {tb.orders.map((o) => (
+              <OrderPanel
+                key={o.id}
+                t={t}
+                locale={locale}
+                order={o}
+                currency={currency}
+                title={o.kind === "pre" ? t.preOrderTag : fmt(t.roundN, { n: o.round })}
+                onAction={(action) => onOrder(tb, o.id, action)}
+              />
+            ))}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

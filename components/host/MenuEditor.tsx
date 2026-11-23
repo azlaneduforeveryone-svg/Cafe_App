@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Eye, EyeOff, ImagePlus, Pencil, Plus, Tag, Trash2, Utensils } from "lucide-react";
+import { CalendarClock, ImagePlus, PackageCheck, PackageX, Pencil, Plus, Tag, Trash2, Utensils } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { uploadErrorText } from "./LogoCard";
+import { MealTimesCard, SchedulePicker, scheduleSummary } from "./Schedule";
 import { uploadImage } from "@/lib/image";
 import { money } from "@/lib/pricing";
 import { tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
-import type { Locale, Menu, MenuCategory, MenuItem } from "@/lib/types";
+import type { Locale, MealPeriod, Menu, MenuCategory, MenuItem } from "@/lib/types";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-white border border-line text-sm focus:outline-none focus:ring-2 focus:ring-ember";
 const LANGS: { key: "En" | "Ar" | "Ur"; dir: "ltr" | "rtl"; lang: string }[] = [
@@ -25,6 +26,8 @@ function errorText(t: Dict, code?: string) {
       return t.badPrice;
     case "bad_compare_price":
       return t.badComparePrice;
+    case "bad_time":
+      return t.badTime;
     default:
       return t.errorGeneric;
   }
@@ -44,6 +47,7 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
   const [menu, setMenu] = useState<Menu>(initial);
   const [editing, setEditing] = useState<MenuItem | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [stockMenu, setStockMenu] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -66,7 +70,8 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
 
   return (
     <div className="space-y-6">
-      <Categories t={t} categories={menu.categories} run={run} />
+      <MealTimesCard t={t} initial={menu.mealPeriods} onSaved={reload} />
+      <Categories t={t} locale={locale} categories={menu.categories} meal={menu.mealPeriods} run={run} />
 
       <section className="bg-white rounded-3xl border border-line shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-4">
@@ -94,23 +99,69 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-stone-500 mb-2">{cat ? tr(cat, "name", locale) : t.noCategory}</h3>
                 <ul className="space-y-2">
                   {items.map((item) => (
-                    <li key={item.id} className={`p-3 rounded-2xl border flex items-center gap-3 ${item.available ? "border-line bg-white" : "border-dashed border-stone-300 bg-stone-50"}`}>
+                    <li key={item.id} className={`p-3 rounded-2xl border flex items-center gap-3 ${item.inStock ? "border-line bg-white" : "border-dashed border-stone-300 bg-stone-50"}`}>
                       <Thumb url={item.imageUrl} />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="font-extrabold text-sm truncate">{tr(item, "name", locale)}</span>
                           {item.isDeal && <DealBadge label={t.dealBadge} />}
-                          {!item.available && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-200 text-stone-600">{t.hiddenBadge}</span>}
+                          {!item.inStock && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800">
+                              {t.soldOut}
+                              {item.backAt ? ` · ${t.backAt.replace("{time}", timeLabel(item.backAt, locale))}` : ""}
+                            </span>
+                          )}
+                          {item.inStock && !item.onSchedule && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-200 text-stone-600">{t.notOnNow}</span>}
                         </div>
-                        <Price item={item} currency={menu.currency} />
+                        <div className="flex flex-wrap items-center gap-x-3">
+                          <Price item={item} currency={menu.currency} />
+                          {scheduleSummary(item.days, item.periods, menu.mealPeriods, locale) && (
+                            <span className="text-[11px] text-stone-500 inline-flex items-center gap-1">
+                              <CalendarClock className="w-3 h-3" aria-hidden />
+                              {scheduleSummary(item.days, item.periods, menu.mealPeriods, locale)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <IconButton
-                          label={item.available ? t.hide : t.show}
-                          onClick={() => run(`/api/host/menu/items/${item.id}`, "PUT", { available: !item.available })}
-                        >
-                          {item.available ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </IconButton>
+                      <div className="flex items-center gap-1 shrink-0 relative">
+                        {item.inStock ? (
+                          <IconButton label={t.markSoldOut} onClick={() => setStockMenu(stockMenu === item.id ? null : item.id)}>
+                            <PackageX className="w-4 h-4" />
+                          </IconButton>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => run(`/api/host/menu/items/${item.id}`, "PUT", { stock: "in" })}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                          >
+                            <PackageCheck className="w-3.5 h-3.5" aria-hidden />
+                            <span className="hidden sm:inline">{t.backInStock}</span>
+                          </button>
+                        )}
+                        {stockMenu === item.id && (
+                          <div role="menu" className="absolute top-full end-0 mt-1 z-20 w-56 bg-white rounded-xl border border-line shadow-lg p-1.5">
+                            <p className="px-2 py-1 text-[11px] font-bold text-stone-500">{t.markSoldOut}</p>
+                            {(
+                              [
+                                ["out_today", t.soldOutToday],
+                                ["out", t.soldOutUntilOn],
+                              ] as const
+                            ).map(([mode, label]) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitem"
+                                onClick={async () => {
+                                  setStockMenu(null);
+                                  await run(`/api/host/menu/items/${item.id}`, "PUT", { stock: mode });
+                                }}
+                                className="w-full text-start px-2 py-2 rounded-lg text-sm font-semibold hover:bg-stone-100"
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <IconButton label={t.edit} onClick={() => setEditing(item)}>
                           <Pencil className="w-4 h-4" />
                         </IconButton>
@@ -146,6 +197,7 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
           locale={locale}
           item={editing === "new" ? null : editing}
           categories={menu.categories}
+          meal={menu.mealPeriods}
           currency={menu.currency}
           onClose={() => setEditing(null)}
           onSaved={async () => {
@@ -158,10 +210,23 @@ export function MenuEditor({ t, locale, initial }: { t: Dict; locale: Locale; in
   );
 }
 
-function Categories({ t, categories, run }: { t: Dict; categories: MenuCategory[]; run: (url: string, method: string, body?: unknown) => Promise<boolean> }) {
+function Categories({
+  t,
+  locale,
+  categories,
+  meal,
+  run,
+}: {
+  t: Dict;
+  locale: Locale;
+  categories: MenuCategory[];
+  meal: MealPeriod[];
+  run: (url: string, method: string, body?: unknown) => Promise<boolean>;
+}) {
   const empty = { nameEn: "", nameAr: "", nameUr: "" };
   const [draft, setDraft] = useState(empty);
   const [edits, setEdits] = useState<Record<string, typeof empty>>({});
+  const [scheduling, setScheduling] = useState<MenuCategory | null>(null);
 
   return (
     <section className="bg-white rounded-3xl border border-line shadow-sm p-5">
@@ -171,8 +236,10 @@ function Categories({ t, categories, run }: { t: Dict; categories: MenuCategory[
         {categories.map((c) => {
           const v = edits[c.id] ?? { nameEn: c.nameEn, nameAr: c.nameAr, nameUr: c.nameUr };
           const changed = v.nameEn !== c.nameEn || v.nameAr !== c.nameAr || v.nameUr !== c.nameUr;
+          const summary = scheduleSummary(c.days, c.periods, meal, locale);
           return (
-            <div key={c.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+            <div key={c.id}>
+            <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
               {LANGS.map(({ key, dir, lang }) => (
                 <input
                   key={key}
@@ -190,7 +257,7 @@ function Categories({ t, categories, run }: { t: Dict; categories: MenuCategory[
                   <button
                     type="button"
                     onClick={async () => {
-                      if (await run(`/api/host/menu/categories/${c.id}`, "PUT", v)) {
+                      if (await run(`/api/host/menu/categories/${c.id}`, "PUT", { ...v, days: c.days, periods: c.periods })) {
                         const next = { ...edits };
                         delete next[c.id];
                         setEdits(next);
@@ -201,10 +268,20 @@ function Categories({ t, categories, run }: { t: Dict; categories: MenuCategory[
                     {t.save}
                   </button>
                 )}
+                <IconButton label={t.scheduleBtn} onClick={() => setScheduling(c)}>
+                  <CalendarClock className={`w-4 h-4 ${summary ? "text-ember" : ""}`} />
+                </IconButton>
                 <IconButton label={t.delete} danger onClick={() => run(`/api/host/menu/categories/${c.id}`, "DELETE")}>
                   <Trash2 className="w-4 h-4" />
                 </IconButton>
               </div>
+            </div>
+            {summary && (
+              <p className="text-[11px] text-stone-500 mt-1 inline-flex items-center gap-1">
+                <CalendarClock className="w-3 h-3" aria-hidden />
+                {summary}
+              </p>
+            )}
             </div>
           );
         })}
@@ -234,9 +311,70 @@ function Categories({ t, categories, run }: { t: Dict; categories: MenuCategory[
           </button>
         </form>
       </div>
+      {scheduling && (
+        <CategoryScheduleModal
+          t={t}
+          locale={locale}
+          category={scheduling}
+          meal={meal}
+          onClose={() => setScheduling(null)}
+          onSave={async (days, periods) => {
+            const c = scheduling;
+            setScheduling(null);
+            await run(`/api/host/menu/categories/${c.id}`, "PUT", { nameEn: c.nameEn, nameAr: c.nameAr, nameUr: c.nameUr, days, periods });
+          }}
+        />
+      )}
     </section>
   );
 }
+
+function CategoryScheduleModal({
+  t,
+  locale,
+  category,
+  meal,
+  onClose,
+  onSave,
+}: {
+  t: Dict;
+  locale: Locale;
+  category: MenuCategory;
+  meal: MealPeriod[];
+  onClose: () => void;
+  onSave: (days: number, periods: string[]) => void;
+}) {
+  const [days, setDays] = useState(category.days);
+  const [periods, setPeriods] = useState(category.periods);
+  return (
+    <Modal title={`${t.categorySchedule}: ${tr(category, "name", locale)}`} onClose={onClose} closeLabel={t.close}>
+      <div className="space-y-4">
+        <SchedulePicker
+          t={t}
+          locale={locale}
+          days={days}
+          periods={periods}
+          meal={meal}
+          onChange={(d, p) => {
+            setDays(d);
+            setPeriods(p);
+          }}
+        />
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100">
+            {t.cancel}
+          </button>
+          <button type="button" onClick={() => onSave(days, periods)} className="px-5 py-2.5 rounded-xl bg-ember hover:bg-ember-dark text-white text-xs font-extrabold shadow">
+            {t.save}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const timeLabel = (ms: number, l: Locale) =>
+  new Intl.DateTimeFormat(l === "en" ? "en-GB" : l, { weekday: "short", hour: "2-digit", minute: "2-digit", numberingSystem: "latn" }).format(new Date(ms));
 
 interface Draft {
   nameEn: string;
@@ -248,7 +386,8 @@ interface Draft {
   price: string;
   compareAtPrice: string;
   isDeal: boolean;
-  available: boolean;
+  days: number;
+  periods: string[];
   categoryId: string;
   imagePath: string | null;
   imageUrl: string | null;
@@ -259,6 +398,7 @@ function ItemModal({
   locale,
   item,
   categories,
+  meal,
   currency,
   onClose,
   onSaved,
@@ -267,6 +407,7 @@ function ItemModal({
   locale: Locale;
   item: MenuItem | null;
   categories: MenuCategory[];
+  meal: MealPeriod[];
   currency: string;
   onClose: () => void;
   onSaved: () => void;
@@ -282,7 +423,8 @@ function ItemModal({
     price: item ? String(item.price) : "",
     compareAtPrice: item?.compareAtPrice ? String(item.compareAtPrice) : "",
     isDeal: item?.isDeal ?? false,
-    available: item?.available ?? true,
+    days: item?.days ?? 127,
+    periods: item?.periods ?? [],
     categoryId: item?.categoryId ?? "",
     imagePath: item?.imagePath ?? null,
     imageUrl: item?.imageUrl ?? null,
@@ -417,7 +559,7 @@ function ItemModal({
           </label>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid gap-3">
           <label className="flex items-start gap-2 p-3 rounded-xl border border-line cursor-pointer">
             <input type="checkbox" checked={d.isDeal} onChange={(e) => set("isDeal", e.target.checked)} className="mt-0.5 accent-ember" />
             <span>
@@ -425,11 +567,19 @@ function ItemModal({
               <span className="block text-[11px] text-stone-500">{t.dealHelp}</span>
             </span>
           </label>
-          <label className="flex items-start gap-2 p-3 rounded-xl border border-line cursor-pointer">
-            <input type="checkbox" checked={d.available} onChange={(e) => set("available", e.target.checked)} className="mt-0.5 accent-ember" />
-            <span className="block text-sm font-bold">{t.availableLabel}</span>
-          </label>
         </div>
+
+        <fieldset className="p-3 rounded-xl border border-line">
+          <legend className="px-1 text-xs font-bold text-stone-700">{t.scheduleTitle}</legend>
+          <SchedulePicker
+            t={t}
+            locale={locale}
+            days={d.days}
+            periods={d.periods}
+            meal={meal}
+            onChange={(days, periods) => setD((p) => ({ ...p, days, periods }))}
+          />
+        </fieldset>
 
         {error && (
           <p role="alert" className="text-sm font-semibold text-red-700">

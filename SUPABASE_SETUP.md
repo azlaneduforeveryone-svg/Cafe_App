@@ -181,3 +181,29 @@ Test checklist:
 - [ ] **Daily CSV** and **Dishes CSV** download and open in Excel with Arabic and Urdu dish names readable
 - [ ] Switch the host language to Arabic and Urdu: the page reads right to left
 - [ ] A new restaurant with no visits shows "Not enough data yet" and "No parties in this period yet", with no errors
+
+---
+
+## Sold out, meal times and ordering at the table (added later)
+
+1. Supabase > **SQL Editor** > run `supabase/migrations/0005_menu_schedule_table_orders.sql` (safe to re-run). Don't re-run `0002` after this one: 0005 replaces its order function.
+2. Optional test restaurant: `node --env-file=.env.local scripts/seed-qalandari.mjs`. It creates "Qalandari Food Truck (test)" (Saudi, SAR) with 6 dishes and prints a login with a new random password. Only the daal chawal prices are real; the others say "sample price". Keep it for internal testing.
+
+What it does:
+- **Sold out**: on the Menu page, the box icon on a dish marks it sold out **until tomorrow** (back by itself at 4 AM) or **until you turn it back on**. Guests still see it, greyed out with "Sold out", and can't order it.
+- **Meal times**: at the top of the Menu page, add Breakfast / Lunch / Dinner (or your own) with their times. Dinner can run past midnight (18:00 to 01:00).
+- **When it's served**: in a dish's edit window, pick days and meal times. The calendar icon next to a category does the same for the whole category. Outside those times the dish is hidden from guests and the server refuses orders for it.
+- **Ordering at the table**: after the host taps Seat, the guest's ticket page turns into "Order at your table". Each order the restaurant accepts is a round (Order 1, Order 2...). While a round waits for the restaurant, sending again updates it instead of adding a new one.
+- **Tables tab** on the host queue page: seated guests, their pre-order and rounds, table number box, Accept / Cancel, and **Close table**. A new table order makes a chime and a red count on the tab. A table closes by itself 6 hours after seating.
+- Reports now count every accepted app order (pre-order and table rounds) of seated guests, labelled "App orders".
+
+Test checklist:
+- [ ] Menu page: add the three preset meal times, save; set a dish to Lunch only: outside lunch it disappears from the guest menu and shows "Not on now" in the editor
+- [ ] Set a category to Fri, Sat only: its dishes vanish from the guest menu on other days
+- [ ] Mark a dish sold out "until tomorrow": guest sees it greyed with "Sold out"; editor shows "back" time; **Back in stock** restores it
+- [ ] Guest joins, is seated: ticket shows "Order at your table"; order 2 dishes; host Tables tab chimes, shows "New order"; Accept
+- [ ] Guest orders again: shows as Order 2; while not accepted, editing it updates the same round; guest can cancel it
+- [ ] Host enters a table number: the guest sees "Table 5"
+- [ ] Host closes the table: guest sees "Thanks for visiting" and can't order
+- [ ] A guest who still had a sold-out dish in the cart gets "no longer available" and the menu reloads
+- [ ] Guest and host screens in Arabic and Urdu read right to left

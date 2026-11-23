@@ -395,7 +395,7 @@ export function dailyCSV(rep: Report) {
   const head = [
     "Business date", "Parties joined", "Seated parties", "Guests seated", "No-shows", "Walked away",
     "No-show %", "Avg wait (min)", "Joined by QR", "Walk-ins added by host",
-    "Pre-orders (seated)", `Pre-order sales (${rep.currency})`, "Pre-orders not collected", `Not collected value (${rep.currency})`,
+    "App orders (seated guests)", `App order sales (${rep.currency})`, "Pre-orders not collected", `Not collected value (${rep.currency})`,
   ];
   const rows = rep.daily.map((d) => {
     const t = totalsOf([d]);
@@ -413,7 +413,7 @@ export function dailyCSV(rep: Report) {
 export function dishesCSV(rep: Report) {
   const total = rep.dishes.reduce((s, d) => s + d.revenue, 0);
   return toCSV([
-    ["Dish (English)", "Dish (Arabic)", "Dish (Urdu)", "Quantity", `Sales (${rep.currency})`, "Share of pre-order sales %"],
+    ["Dish (English)", "Dish (Arabic)", "Dish (Urdu)", "Quantity", `Sales (${rep.currency})`, "Share of app order sales %"],
     ...rep.dishes.map((d) => [d.names.en, d.names.ar, d.names.ur, d.qty, d.revenue, total ? Math.round((d.revenue / total) * 1000) / 10 : 0]),
   ]);
 }
