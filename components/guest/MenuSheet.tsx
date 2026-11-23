@@ -22,6 +22,7 @@ export function MenuSheet({
   token,
   order,
   mode = "pre",
+  endpoints,
   onClose,
   onSent,
 }: {
@@ -30,10 +31,14 @@ export function MenuSheet({
   token: string;
   order: Order | null;
   mode?: "pre" | "table";
+  /** Defaults to the waitlist ticket's endpoints. */
+  endpoints?: { menu: string; order: string };
   onClose: () => void;
   onSent: () => void;
 }) {
   const readOnly = mode === "pre" && order?.status === "accepted";
+  const menuUrl = endpoints?.menu ?? `/api/ticket/${encodeURIComponent(token)}/menu`;
+  const orderUrl = endpoints?.order ?? `/api/ticket/${encodeURIComponent(token)}/${mode === "table" ? "table-order" : "order"}`;
   const [menu, setMenu] = useState<Menu | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [cart, setCart] = useState<Cart>(() =>
@@ -45,7 +50,7 @@ export function MenuSheet({
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    const res = await fetch(`/api/ticket/${encodeURIComponent(token)}/menu`, { cache: "no-store" }).catch(() => null);
+    const res = await fetch(menuUrl, { cache: "no-store" }).catch(() => null);
     if (!res?.ok) {
       setLoadError(true);
       return null;
@@ -57,7 +62,7 @@ export function MenuSheet({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/ticket/${encodeURIComponent(token)}/menu`, { cache: "no-store" })
+    fetch(menuUrl, { cache: "no-store" })
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) return setLoadError(true);
@@ -67,7 +72,7 @@ export function MenuSheet({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [menuUrl]);
 
   // Close with Escape, like other dialogs.
   useEffect(() => {
@@ -89,7 +94,7 @@ export function MenuSheet({
   async function submit() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/ticket/${encodeURIComponent(token)}/${mode === "table" ? "table-order" : "order"}`, {
+    const res = await fetch(orderUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: lines.map((l) => ({ id: l.item.id, qty: l.qty })), note }),

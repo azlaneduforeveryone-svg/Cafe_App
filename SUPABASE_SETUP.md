@@ -207,3 +207,33 @@ Test checklist:
 - [ ] Host closes the table: guest sees "Thanks for visiting" and can't order
 - [ ] A guest who still had a sold-out dish in the cart gets "no longer available" and the menu reloads
 - [ ] Guest and host screens in Arabic and Urdu read right to left
+
+---
+
+## Tables, table QR codes, floor map and call waiter (added later)
+
+1. Supabase > **SQL Editor** > run `supabase/migrations/0006_tables_sessions_alerts.sql` (safe to re-run).
+2. Host top bar > **Floor** > **Manage tables**: add your tables (e.g. T1 to T6), seats, section and waiter.
+3. **Print QR** prints one card per table. Each code only works for its own table.
+4. Add the guest **Wi-Fi** name and password on the Floor page (optional).
+
+How it stays private and safe:
+- The database is still reachable only by the app's server. Guests never get database access.
+- A table QR contains a secret for that table. Scanning it gives the phone a session key in a hidden (httpOnly) cookie and then a clean address, so a photo of a guest's screen is useless.
+- Everyone at the same table who scans joins the same session, and only sees that table's orders.
+- Every order from a table waits on the Floor page under **Waiting for approval** until staff tap **Send to kitchen**. Someone ordering from outside with a photo of the QR is caught there.
+- **Close table** ends the session: those phones lose access at once. Sessions also end by themselves after 8 hours.
+- **New QR code** (the refresh icon in Manage tables) invalidates a printed code if it's copied or stolen.
+- Each call button (Water, Napkins, Bill, Call waiter) can be open only once per table until staff resolve it, so nobody can spam the floor.
+
+Test checklist:
+- [ ] Add T1 to T6; Print QR shows six cards
+- [ ] Scan T5's code with a phone: it opens "Table T5" and the address bar shows no secret
+- [ ] Open the same page address on another phone without scanning: it says "Scan the QR code on your table" and shows no orders
+- [ ] Order from T5: it appears under Waiting for approval with a chime; **Send to kitchen** turns it green on the phone
+- [ ] Second phone scans T5: sees the same orders and can add more
+- [ ] Phone taps Call waiter > Water: red pulsing "T5 Water" with a running timer on the Floor page; **Resolve** clears it; tapping Water twice before resolving creates only one call
+- [ ] Seat a waiting party (with a pre-order) on T2 from the Floor page: the pre-order shows on T2, and the guest's ticket page shows the table
+- [ ] **Close table** on T5: the phone switches to "Thanks for visiting" and can't order
+- [ ] **New QR code** on T5, then scan the old printed code: "This QR code isn't valid"
+- [ ] Floor page and guest table page in Arabic and Urdu read right to left
