@@ -131,10 +131,11 @@ export async function triviaSnapshot(tableId: string): Promise<TriviaSnapshot | 
   base.board = await board(r, s.table_id);
 
   const g = list[0];
+  base.serverNow = Date.now();
   if (!g) return base;
   const { phase, index } = phaseOf(g, now);
   // A finished game stays on screen for 10 minutes, then the table is back in the lobby.
-  if (phase === "done" && now - Date.parse(g.ends_at) > 10 * 60_000) return base;
+  if (phase === "done" && now - Date.parse(g.ends_at) > 10 * 60_000) return { ...base, serverNow: Date.now() };
 
   const { data: answers } = await db.from("trivia_answers").select("player_id, q_index, choice, correct, points").eq("game_id", g.id);
   const ans = (answers ?? []) as { player_id: string; q_index: number; choice: number; correct: boolean; points: number }[];
@@ -169,6 +170,7 @@ export async function triviaSnapshot(tableId: string): Promise<TriviaSnapshot | 
       };
     }
   }
+  base.serverNow = Date.now();
   base.game = {
     id: g.id,
     startsAt: Date.parse(g.starts_at),

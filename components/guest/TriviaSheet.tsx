@@ -35,6 +35,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
+    const sent = Date.now();
     const res = await fetch(url, { cache: "no-store" }).catch(() => null);
     if (!res) return;
     if (!res.ok) {
@@ -42,7 +43,10 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
       return;
     }
     const s = (await res.json()) as TriviaSnapshot;
-    setOffset(s.serverNow - Date.now());
+    // The server stamps its time just before replying, so only the trip back is unknown:
+    // half the round trip at most, capped at a typical mobile hop (the server's work is in the round trip too).
+    const got = Date.now();
+    setOffset(s.serverNow - (got - Math.min(150, (got - sent) / 2)));
     setSnap(s);
   }, [url]);
 
