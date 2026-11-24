@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { BellRing, ChefHat, Clock, Droplets, HandHelping, LayoutGrid, Plus, Printer, QrCode, Receipt, RefreshCw, Trash2, Users, Utensils, Wifi, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
+import { KitchenAlerts } from "./KitchenAlerts";
 import { can, type Permission } from "@/lib/permissions";
 import type { PayMethod } from "@/lib/types";
 import { useLive, useNow } from "@/components/useLive";
@@ -106,6 +107,8 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
         </div>
         )}
       </div>
+
+      <KitchenAlerts t={t} items={data.inbox} onDone={() => void refresh()} />
 
       {/* Calls */}
       {alerts.length > 0 && (

@@ -7,6 +7,7 @@ import { getRestaurantById, toPublic } from "./queue";
 import { RECEIPT_HOURS, billFor, billSummaries, ratingSince } from "./bills";
 import { loyaltyPromo } from "./loyalty";
 import { can, type Role } from "./permissions";
+import { inbox, type InboxItem } from "./notify";
 import type { Bill, BillSummary, LoyaltyMode, LoyaltyPromo, Order, PublicRestaurant, Restaurant, Section } from "./types";
 
 /**
@@ -64,6 +65,8 @@ export interface FloorSnapshot {
   waiterScope: "all" | "assigned";
   /** Staff list for assigning tables (managers only; empty for others). */
   staff: { id: string; name: string; role: Role }[];
+  /** Kitchen notifications for the person looking. */
+  inbox: InboxItem[];
   tables: FloorTable[];
   /** Waitlist parties that can be seated at a table. */
   waiting: { id: string; ticketNumber: number; name: string; partySize: number; status: string; hasPreOrder: boolean }[];
@@ -438,6 +441,7 @@ export async function floorSnapshot(r: Restaurant, viewer: Viewer): Promise<Floo
     loyaltyMode: r.loyalty.mode,
     sections: r.sections,
     viewer: { id: viewer.userId, role: viewer.role },
+    inbox: await inbox(viewer.userId),
     waiterScope: r.waiterScope,
     staff: ((staffRows ?? []) as { user_id: string; name: string; role: Role }[]).map((x) => ({ id: x.user_id, name: x.name, role: x.role })),
     tables: visible,

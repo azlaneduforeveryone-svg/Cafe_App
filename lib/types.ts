@@ -103,6 +103,8 @@ export interface HostEntry {
 }
 
 export interface HostSnapshot {
+  /** Kitchen notifications for the person looking (pre-order ready, out of stock). */
+  inbox: { id: number; kind: "ready" | "out_of_stock"; table: string; body: string; at: number }[];
   serverNow: number;
   channel: string;
   restaurant: PublicRestaurant & {

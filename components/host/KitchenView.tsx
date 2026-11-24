@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Flame } from "lucide-react";
+import { Ban, Check, Flame, LogOut, X } from "lucide-react";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, tr } from "@/lib/format";
@@ -15,15 +15,32 @@ const AMBER = 10 * 60;
 const RED = 18 * 60;
 
 /** High-contrast kitchen display: one column per station, oldest ticket first. */
-export function KitchenView({ t, locale, initial, canAct = true }: { t: Dict; locale: Locale; initial: KitchenSnapshot; canAct?: boolean }) {
-  const { data, gone, clockOffset, refresh } = useLive("/api/host/kitchen", initial);
+export interface DeviceDish {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  station: string;
+  inStock: boolean;
+}
+type DeviceSnapshot = KitchenSnapshot & { device?: string; dishes?: DeviceDish[] };
+
+/**
+ * mode "staff": the logged-in Kitchen page. mode "device": a locked kitchen display that can only
+ * mark dishes ready and mark a dish out of stock (no prices, no other pages).
+ */
+export function KitchenView({ t, locale, initial, canAct = true, mode = "staff" }: { t: Dict; locale: Locale; initial: DeviceSnapshot; canAct?: boolean; mode?: "staff" | "device" }) {
+  const device = mode === "device";
+  const { data, gone, clockOffset, refresh } = useLive<DeviceSnapshot>(device ? "/api/kitchen-display" : "/api/host/kitchen", initial);
   const now = useNow(clockOffset);
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [stockOpen, setStockOpen] = useState(false);
+  const [confirmOut, setConfirmOut] = useState<DeviceDish | null>(null);
 
   useEffect(() => {
-    if (gone) router.replace("/login");
-  }, [gone, router]);
+    if (gone) router.replace(device ? "/kitchen-display" : "/login");
+  }, [gone, router, device]);
 
   const seen = useRef(data.tickets.length);
   useEffect(() => {
@@ -41,13 +58,84 @@ export function KitchenView({ t, locale, initial, canAct = true }: { t: Dict; lo
   async function ready(tk: KitchenTicket) {
     unlockAudio();
     setBusy(`${tk.orderId}:${tk.station}`);
-    await fetch(`/api/host/kitchen/${tk.orderId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ station: tk.station }) }).catch(() => null);
+    if (device) {
+      await fetch("/api/kitchen-display", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ready", orderId: tk.orderId, station: tk.station }) }).catch(() => null);
+    } else {
+      await fetch(`/api/host/kitchen/${tk.orderId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ station: tk.station }) }).catch(() => null);
+    }
     setBusy(null);
+    void refresh();
+  }
+
+  async function outOfStock(d: DeviceDish) {
+    unlockAudio();
+    setConfirmOut(null);
+    await fetch("/api/kitchen-display", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "out", itemId: d.id }) }).catch(() => null);
     void refresh();
   }
 
   return (
     <main className="flex-1 w-full bg-[#0F1115] text-stone-100 px-3 sm:px-5 py-5">
+      {device && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <p className="text-sm text-stone-400 font-bold">
+            {t.kdTitle} · <bdi>{data.device}</bdi>
+          </p>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setStockOpen(true)} className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-extrabold inline-flex items-center gap-2">
+              <Ban className="w-4 h-4" aria-hidden />
+              {t.kdOutOfStock}
+            </button>
+            <a href="/login?next=/dashboard/kitchen" className="px-3 py-2.5 rounded-xl bg-white/10 text-stone-300 text-xs font-bold inline-flex items-center gap-1.5" title={t.kdExitHelp}>
+              <LogOut className="w-4 h-4" aria-hidden />
+              {t.kdExit}
+            </a>
+          </div>
+        </div>
+      )}
+      {device && stockOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={t.kdOutOfStock}>
+          <div className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto bg-[#181B20] rounded-3xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-extrabold">{t.kdOutOfStock}</h2>
+              <button type="button" onClick={() => setStockOpen(false)} aria-label={t.close} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                <X className="w-5 h-5" aria-hidden />
+              </button>
+            </div>
+            <p className="text-sm text-stone-400">{t.kdOutHelp}</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {(data.dishes ?? []).map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  disabled={!d.inStock}
+                  onClick={() => setConfirmOut(d)}
+                  className={`px-4 py-3 rounded-xl text-start font-bold border-2 ${d.inStock ? "border-white/15 bg-white/5 hover:border-red-500" : "border-red-900 bg-red-950/50 text-red-300"}`}
+                >
+                  {tr(d, "name", locale)}
+                  {!d.inStock && <span className="block text-xs font-bold">{t.kdIsOut}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {device && confirmOut && (
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" role="alertdialog" aria-modal="true">
+          <div className="w-full max-w-sm bg-[#181B20] rounded-3xl p-6 space-y-4 text-center">
+            <p className="text-lg font-extrabold">{fmt(t.kdConfirmOut, { dish: tr(confirmOut, "name", locale) })}</p>
+            <p className="text-sm text-stone-400">{t.kdConfirmOutHelp}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setConfirmOut(null)} className="py-3 rounded-xl bg-white/10 font-bold">
+                {t.cancel}
+              </button>
+              <button type="button" onClick={() => void outOfStock(confirmOut)} className="py-3 rounded-xl bg-red-600 font-extrabold">
+                {t.kdOutOfStock}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(columns.length, 4)}, minmax(0, 1fr))` }}>
         {columns.map((col) => {
           const list = data.tickets.filter((tk) => inColumn(tk, col.id)).sort((a, b) => a.acceptedAt - b.acceptedAt);

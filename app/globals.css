@@ -68,3 +68,8 @@ body {
   from { transform: translateY(24px); opacity: 0.6; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* The HTML hidden attribute always wins over display utilities (role-gated buttons rely on it). */
+[hidden]:where(:not([hidden="until-found"])) {
+  display: none !important;
+}

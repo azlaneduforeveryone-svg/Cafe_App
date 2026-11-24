@@ -1,6 +1,7 @@
 import "server-only";
 import { billForEntry, billSummaries } from "./bills";
 import { loyaltyPromo } from "./loyalty";
+import { inbox } from "./notify";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
@@ -232,7 +233,7 @@ function startOfToday(country: Country) {
   return Math.floor((Date.now() + offset) / 86_400_000) * 86_400_000 - offset;
 }
 
-export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
+export async function hostSnapshot(r: Restaurant, viewerId?: string): Promise<HostSnapshot> {
   const since = new Date(startOfToday(r.country)).toISOString();
   const [entries, closed, seatedRows] = await Promise.all([
     activeEntries(r.id),
@@ -272,6 +273,7 @@ export async function hostSnapshot(r: Restaurant): Promise<HostSnapshot> {
     : null;
 
   return {
+    inbox: viewerId ? await inbox(viewerId) : [],
     serverNow: Date.now(),
     channel: r.id,
     restaurant: {

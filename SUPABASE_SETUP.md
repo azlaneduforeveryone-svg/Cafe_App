@@ -396,3 +396,27 @@ Invites by mobile need no SMS: the manager gets the link and a WhatsApp button. 
 - [ ] Staff page > Waiters see: "Only their tables". Assign T2 to the waiter in Floor > Manage tables. The waiter's Floor shows only T2; acting on another table's order returns `not_your_table`.
 - [ ] Activity shows: invite, join, a price change, a mark paid with amount and table.
 - [ ] Remove the waiter: their next page load sends them to login.
+
+---
+
+## Kitchen display mode and kitchen → waiter notifications (migration 0012, Phase 6b)
+
+**Run:** SQL Editor > paste `supabase/migrations/0012_kitchen_display_notifications.sql` > Run. Safe to re-run. Needs 0011 first.
+
+- `kitchen_devices`: tablets a manager switched into kitchen mode. The tablet holds only a device token (httpOnly cookie `tp_kd`, hash stored), never a staff login. It can mark dishes ready and mark a dish out of stock (until tomorrow), nothing else, and sees no prices. Leaving kitchen mode = a manager logs in on it. Staff page > Kitchen displays > Switch off stops a lost tablet at once.
+- `staff_notifications`: when a station marks food ready, the table's assigned waiter is told (no waiter assigned: every waiter; no waiters: managers and owner). Waitlist pre-orders go to reception. When a dish goes out of stock, the waiters of tables that ordered it and haven't been served are told. Alerts show at the top of Floor and the waitlist screen with a chime; "Got it" clears them.
+- Kitchen display actions are in the Activity log under the screen's name (role: Kitchen display).
+
+Limitation: alerts appear on the waiter's screen while the TablePulse page is open on their phone. A locked phone gets no push notification yet (that needs web push, a separate step).
+
+### Checklist
+- [ ] Migration ran with no error.
+- [ ] Manager on a tablet: Kitchen > "Use this screen as kitchen display" > name "Tandoor tablet" > Switch. It shows the kitchen display with Out of stock and Exit; opening /dashboard on that browser goes to login.
+- [ ] On the display: no prices anywhere; Mark ready works.
+- [ ] Waiter (invited, assigned T4) has the Floor open on another browser. Mark T4's tandoor ready on the display: the waiter sees "From the kitchen: T4 ready to serve: …" with a chime. "Got it" clears it.
+- [ ] A table with no assigned waiter: every waiter gets the alert.
+- [ ] Display > Out of stock > a dish on an open order: confirm. The dish shows sold out on the guest menu, and that table's waiter gets "… is out of stock".
+- [ ] Exit on the display > manager login > lands on Kitchen (normal staff page).
+- [ ] Staff page lists the display with "last active"; Switch off: the display goes to "This screen isn't a kitchen display" within a few seconds or on next refresh.
+- [ ] Activity shows the display's out-of-stock action under its name.
+- [ ] Waiter: the Kitchen page shows tickets with no Mark ready buttons (hidden fix).

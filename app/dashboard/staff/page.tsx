@@ -8,6 +8,7 @@ import { hostLocale } from "@/lib/locale";
 import { currencyOf } from "@/lib/menu";
 import { can } from "@/lib/permissions";
 import { listStaff } from "@/lib/staff";
+import { listDevices } from "@/lib/kitchenDevice";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,11 @@ export default async function StaffPage() {
   const ctx = await requireStaff("staff.manage");
   const locale = await hostLocale();
   const t = dict(locale);
-  const [team, activity] = await Promise.all([listStaff(ctx), can(ctx.staff.role, "activity.view") ? listActivity(ctx.restaurant.id) : Promise.resolve([])]);
+  const [team, activity, devices] = await Promise.all([
+    listStaff(ctx),
+    can(ctx.staff.role, "activity.view") ? listActivity(ctx.restaurant.id) : Promise.resolve([]),
+    can(ctx.staff.role, "kitchen.device") ? listDevices(ctx.restaurant.id) : Promise.resolve([]),
+  ]);
   return (
     <LocaleRoot locale={locale}>
       <HostTopBar t={t} locale={locale} restaurant={ctx.restaurant} active="staff" />
@@ -28,6 +33,7 @@ export default async function StaffPage() {
         waiterScope={ctx.restaurant.waiterScope}
         initial={team}
         activity={activity}
+        devices={devices}
       />
     </LocaleRoot>
   );

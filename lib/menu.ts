@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyOutOfStock, notifyReady } from "./notify";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { deleteImage, ownsPath, publicUrl } from "./media";
@@ -375,6 +376,7 @@ export async function setItemStock(r: Restaurant, id: string, mode: StockMode): 
   if (error) return dbFail(error.message);
   if (!data) return fail("not_found", 404);
   await broadcastChange(r.id);
+  if (mode !== "in") await notifyOutOfStock(r, id);
   return { ok: true, value: undefined };
 }
 
@@ -631,9 +633,10 @@ export async function kitchenSnapshot(r: Restaurant): Promise<KitchenSnapshot> {
 
 export async function stationReady(r: Restaurant, orderId: string, station: unknown): Promise<Result> {
   if (!UUID.test(orderId) || typeof station !== "string" || station.length > 20) return fail("not_found", 404);
-  const { error } = await adminClient().rpc("tp_station_ready", { p_restaurant_id: r.id, p_order_id: orderId, p_station: station }).single();
-  if (error) return fail("not_found", 404);
+  const { data, error } = await adminClient().rpc("tp_station_ready", { p_restaurant_id: r.id, p_order_id: orderId, p_station: station }).single();
+  if (error || !data) return fail("not_found", 404);
   await broadcastChange(r.id);
+  await notifyReady(r, data as Parameters<typeof notifyReady>[1], station);
   return { ok: true, value: undefined };
 }
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
+import { KitchenAlerts } from "./KitchenAlerts";
 import { can, type Permission, type Role } from "@/lib/permissions";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
@@ -114,6 +115,11 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
 
   return (
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6">
+      {data.inbox.length > 0 && (
+        <div className="mb-4">
+          <KitchenAlerts t={t} items={data.inbox} onDone={() => void refresh()} />
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-12 items-start">
         {/* Queue */}
         <section className="lg:col-span-8 space-y-4" aria-label={t.liveQueue}>

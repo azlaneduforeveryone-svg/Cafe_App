@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { fail, json, readBody } from "@/lib/api";
 import { loginEmailFor } from "@/lib/staff";
+import { DEVICE_COOKIE } from "@/lib/kitchenDevice";
+import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
   const b = await readBody(req);
@@ -16,5 +18,7 @@ export async function POST(req: Request) {
     if (error.status === 429) return fail("rate_limited", 429);
     return fail("invalid", 401);
   }
+  // A staff login on a kitchen display ends kitchen mode on this browser.
+  (await cookies()).delete(DEVICE_COOKIE);
   return json({ ok: true });
 }

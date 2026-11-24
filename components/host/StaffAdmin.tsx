@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Copy, History, Mail, MessageCircle, Trash2, UserPlus, Users } from "lucide-react";
+import { Check, Copy, History, Mail, MessageCircle, MonitorSmartphone, Trash2, UserPlus, Users } from "lucide-react";
 import { fmt } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { money } from "@/lib/pricing";
 import { INVITABLE, canManageRole, type Role } from "@/lib/permissions";
 import type { ActivityRow } from "@/lib/activity";
 import type { PendingInvite, StaffMember } from "@/lib/staff";
+import type { KitchenDevice } from "@/lib/kitchenDevice";
 import type { Locale } from "@/lib/types";
 
 const field = "w-full rounded-xl border border-line bg-white px-3 py-2 text-sm";
@@ -29,6 +30,7 @@ export function StaffAdmin({
   waiterScope,
   initial,
   activity,
+  devices: initialDevices,
 }: {
   t: Dict;
   locale: Locale;
@@ -38,7 +40,9 @@ export function StaffAdmin({
   waiterScope: "all" | "assigned";
   initial: Team;
   activity: ActivityRow[];
+  devices: KitchenDevice[];
 }) {
+  const [devices, setDevices] = useState(initialDevices);
   const d = t as unknown as Record<string, string>;
   const [team, setTeam] = useState(initial);
   const [scope, setScope] = useState(waiterScope);
@@ -268,6 +272,42 @@ export function StaffAdmin({
             </label>
           ))}
         </div>
+      </section>
+
+      {/* Kitchen displays */}
+      <section className="p-5 rounded-2xl bg-white border border-line space-y-3">
+        <h2 className="font-extrabold flex items-center gap-2">
+          <MonitorSmartphone className="w-5 h-5 text-ember" aria-hidden />
+          {t.kdListTitle}
+        </h2>
+        <p className="text-xs text-stone-600">{t.kdListHelp}</p>
+        {devices.length === 0 ? (
+          <p className="text-sm text-stone-500">{t.kdNone}</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {devices.map((dv) => (
+              <li key={dv.id} className="py-2.5 flex items-center justify-between gap-3">
+                <span>
+                  <b>{dv.name}</b>
+                  <span className="block text-xs text-stone-500">
+                    <bdi>{dv.lastSeenAt ? fmt(t.kdLastSeen, { when: new Date(dv.lastSeenAt).toLocaleString(locale === "en" ? "en-GB" : `${locale}-u-nu-latn`, { dateStyle: "short", timeStyle: "short" }) }) : t.kdNeverSeen}</bdi>
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm(fmt(t.kdRevokeConfirm, { name: dv.name }))) return;
+                    const res = await fetch(`/api/host/kitchen-device?id=${dv.id}`, { method: "DELETE" }).catch(() => null);
+                    if (res?.ok) setDevices((x) => x.filter((y) => y.id !== dv.id));
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-700 hover:bg-red-50"
+                >
+                  {t.kdRevoke}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Roles explained */}
