@@ -162,6 +162,8 @@ export interface TicketSnapshot {
   hasMenu: boolean;
   /** Present after the guest is seated. */
   table: { open: boolean; label: string; orders: Order[]; bill: Bill | null; loyalty: LoyaltyPromo | null; atTable: boolean } | null;
+  /** Trivia is on here (shown to parties still waiting). */
+  triviaOn: boolean;
 }
 
 export interface MenuCategory {

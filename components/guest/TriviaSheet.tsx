@@ -21,8 +21,8 @@ function clockPhase(startsAt: number, total: number, now: number) {
   return into <= T.answer ? { phase: "question" as const, index, left: Math.ceil(T.answer - into) } : { phase: "reveal" as const, index, left: Math.ceil(SLOT - into) };
 }
 
-export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: Locale; tableId: string; onClose: () => void }) {
-  const url = `/api/table/${tableId}/trivia`;
+export function TriviaSheet({ t, locale, endpoint, goneText, onClose }: { t: Dict; locale: Locale; endpoint: string; goneText?: string; onClose: () => void }) {
+  const url = endpoint;
   const d = t as unknown as Record<string, string>;
   const [snap, setSnap] = useState<TriviaSnapshot | null>(null);
   const [gone, setGone] = useState(false);
@@ -108,7 +108,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
         </div>
 
         <div className="flex-1 px-5 pb-6 space-y-5">
-          {gone && <p className="text-center py-10 text-white/70">{t.trvErr_table_closed}</p>}
+          {gone && <p className="text-center py-10 text-white/70">{goneText ?? t.trvErr_table_closed}</p>}
           {!gone && !snap && <p className="text-center py-10 text-white/60">…</p>}
           {!gone && snap && !snap.on && <p className="text-center py-10 text-white/70">{t.trvErr_trivia_off}</p>}
 

@@ -420,3 +420,19 @@ Limitation: alerts appear on the waiter's screen while the TablePulse page is op
 - [ ] Staff page lists the display with "last active"; Switch off: the display goes to "This screen isn't a kitchen display" within a few seconds or on next refresh.
 - [ ] Activity shows the display's out-of-stock action under its name.
 - [ ] Waiter: the Kitchen page shows tickets with no Mark ready buttons (hidden fix).
+
+---
+
+## Trivia for parties still waiting (migration 0013)
+
+**Run:** SQL Editor > paste `supabase/migrations/0013_trivia_waitlist.sql` > Run. Safe to re-run. Needs 0012 first.
+
+A trivia game now belongs to a table session or a waiting party (never both). The waitlist ticket page shows "Play trivia while you wait" while the party is waiting; everyone who opens the same ticket link can join from their own phone (max 8). Same server clock, scoring, shuffled answers and anti-cheat as table trivia. Waiting-party games don't appear on "Top tables today". The game closes by itself when staff notify the party, so the "your table is ready" screen is never covered.
+
+### Checklist
+- [ ] Migration ran with no error; table trivia on T5 still works (join, start, answer).
+- [ ] Join the waitlist on /r/zaffran-ember: the ticket shows "Play trivia while you wait".
+- [ ] Open the same ticket link in a second browser: both join with different nicknames, start a game, see the same question.
+- [ ] Staff press Notify for that party while a question is open: the trivia sheet closes and the "table ready" screen shows.
+- [ ] After seating at a table, the guest lands on the table page; its trivia starts fresh (table players).
+- [ ] A finished waiting-party game does not appear in "Top tables today".

@@ -195,7 +195,7 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
         </button>
       </div>
 
-      {trivia && <TriviaSheet t={t} locale={locale} tableId={tableId} onClose={() => setTrivia(false)} />}
+      {trivia && <TriviaSheet t={t} locale={locale} endpoint={`/api/table/${tableId}/trivia`} onClose={() => setTrivia(false)} />}
 
       {billSheet && bill && (
         <BillSheet t={t} locale={locale} bill={bill} currency={data.currency} country={data.restaurant.country} endpoint={billEndpoint} loyalty={data.loyalty} onClose={() => setBillSheet(false)} onSent={() => void refresh()} />

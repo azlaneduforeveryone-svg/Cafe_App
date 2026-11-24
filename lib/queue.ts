@@ -377,6 +377,7 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
             atTable: tableIsOpen(e) && (await tableSessionForEntry(e.id)) !== null,
           }
         : null,
+    triviaOn: r.triviaOn,
   };
 }
 

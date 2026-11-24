@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BookOpen, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
+import { Bell, BookOpen, Brain, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
 import { BillCard } from "./BillCard";
 import { MenuSheet } from "./MenuSheet";
+import { TriviaSheet } from "./TriviaSheet";
 import { OrderProgress } from "./OrderProgress";
 import { money } from "@/lib/pricing";
 import { GuestFrame } from "./GuestFrame";
@@ -20,6 +21,10 @@ type NavWithWake = Navigator & { wakeLock?: { request: (type: "screen") => Promi
 
 export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Locale; token: string; initial: TicketSnapshot }) {
   const { data, connected, clockOffset, refresh } = useLive(`/api/ticket/${token}`, initial);
+  // Trivia while waiting. It closes by itself the moment the table is ready, so the buzz screen shows.
+  const [trivia, setTrivia] = useState(false);
+  const waiting = data.entry.status === "waiting";
+
   // Staff just seated this party at a real table: move them to the table page.
   const atTable = !!data.table?.atTable;
   useEffect(() => {
@@ -160,6 +165,18 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
                 await refresh();
               }}
             />
+          )}
+
+          {data.triviaOn && (
+            <button type="button" onClick={() => setTrivia(true)} className="w-full p-4 rounded-2xl bg-ink text-white flex items-center gap-3 text-start shadow-lg">
+              <span className="w-11 h-11 rounded-xl bg-gold/20 flex items-center justify-center shrink-0">
+                <Brain className="w-6 h-6 text-gold" aria-hidden />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block font-extrabold">{t.trvCtaWait}</span>
+                <span className="block text-xs text-white/70">{t.trvCtaWaitSub}</span>
+              </span>
+            </button>
           )}
 
           <div className="space-y-2">
@@ -315,6 +332,8 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
           )}
         </div>
       )}
+      {trivia && waiting && <TriviaSheet t={t} locale={locale} endpoint={`/api/ticket/${token}/trivia`} goneText={t.trvWaitGone} onClose={() => setTrivia(false)} />}
+
       {showMenu && (
         <MenuSheet
           t={t}

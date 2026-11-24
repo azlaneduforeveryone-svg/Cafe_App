@@ -1,7 +1,8 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { adminClient } from "./supabase/admin";
-import { SESSION_HOURS, guestSession, startOfBusinessDay, tableWithRestaurant, type SessionRow } from "./tables";
+import { entryByToken, getRestaurantById } from "./queue";
+import { SESSION_HOURS, guestSession, startOfBusinessDay, tableWithRestaurant } from "./tables";
 import type { Restaurant } from "./types";
 
 /**
@@ -12,7 +13,39 @@ import type { Restaurant } from "./types";
 export const TIMING = { leadIn: 5, answer: 15, reveal: 5 } as const;
 const SLOT = TIMING.answer + TIMING.reveal;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const playerCookie = (tableId: string) => `tp_p_${tableId.replace(/-/g, "")}`;
+/**
+ * Who is playing together: everyone at one table session, or one waiting party (everyone who
+ * opened that party's ticket link). Each phone keeps its own player cookie for that group.
+ */
+export interface TriviaScope {
+  kind: "table" | "entry";
+  id: string; // session id or entry id
+  restaurant: Restaurant;
+  tableId: string | null; // for "Top tables today" (your table highlighted)
+  cookie: string;
+}
+
+const cookieFor = (kind: "table" | "entry", key: string) => (kind === "table" ? `tp_p_${key.replace(/-/g, "")}` : `tp_pe_${key.replace(/-/g, "")}`);
+
+/** Scope for a phone on a table page (needs the table session cookie). */
+export async function tableScope(tableId: string): Promise<TriviaScope | null> {
+  const s = await guestSession(tableId);
+  if (!s) return null;
+  const tr = await tableWithRestaurant(tableId);
+  if (!tr) return null;
+  return { kind: "table", id: s.id, restaurant: tr.restaurant, tableId: s.table_id, cookie: cookieFor("table", tableId) };
+}
+
+/** Scope for a party still waiting, from their ticket link. */
+export async function ticketScope(token: string): Promise<TriviaScope | null> {
+  const e = await entryByToken(token);
+  if (!e || (e.status !== "waiting" && e.status !== "notified")) return null;
+  const r = await getRestaurantById(e.restaurantId);
+  if (!r) return null;
+  return { kind: "entry", id: e.id, restaurant: r, tableId: null, cookie: cookieFor("entry", e.id) };
+}
+
+const col = (sc: TriviaScope) => (sc.kind === "table" ? "session_id" : "entry_id");
 
 type L3 = { en: string; ar: string; ur: string };
 type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string; status: number };
@@ -92,10 +125,10 @@ function orderFor(gameId: string, index: number): number[] {
   return order;
 }
 
-async function playerFor(tableId: string, s: SessionRow) {
-  const token = (await cookies()).get(playerCookie(tableId))?.value ?? "";
+async function playerFor(sc: TriviaScope) {
+  const token = (await cookies()).get(sc.cookie)?.value ?? "";
   if (!/^[0-9a-f]{64}$/.test(token)) return null;
-  const { data } = await adminClient().from("trivia_players").select("id, nickname").eq("token", token).eq("session_id", s.id).maybeSingle();
+  const { data } = await adminClient().from("trivia_players").select("id, nickname").eq("token", token).eq(col(sc), sc.id).maybeSingle();
   return (data as { id: string; nickname: string } | null) ?? null;
 }
 
@@ -107,28 +140,24 @@ function phaseOf(g: GameRow, now: number) {
   return { phase: elapsed - index * SLOT <= TIMING.answer ? ("question" as const) : ("reveal" as const), index };
 }
 
-/** Everything a phone at this table needs right now. Null when the guest has no live session. */
-export async function triviaSnapshot(tableId: string): Promise<TriviaSnapshot | null> {
-  const s = await guestSession(tableId);
-  if (!s) return null;
-  const tr = await tableWithRestaurant(tableId);
-  if (!tr) return null;
-  const r = tr.restaurant;
+/** Everything a phone in this group needs right now. */
+export async function triviaSnapshot(sc: TriviaScope): Promise<TriviaSnapshot> {
+  const r = sc.restaurant;
   const now = Date.now();
   const db = adminClient();
   const base: TriviaSnapshot = { serverNow: now, on: r.triviaOn, me: null, players: [], game: null, board: [], gamesLeft: 0 };
   if (!r.triviaOn) return base;
 
   const [me, { data: players }, { data: games }] = await Promise.all([
-    playerFor(tableId, s),
-    db.from("trivia_players").select("id, nickname").eq("session_id", s.id).order("created_at"),
-    db.from("trivia_games").select("*").eq("session_id", s.id).order("starts_at", { ascending: false }),
+    playerFor(sc),
+    db.from("trivia_players").select("id, nickname").eq(col(sc), sc.id).order("created_at"),
+    db.from("trivia_games").select("*").eq(col(sc), sc.id).order("starts_at", { ascending: false }),
   ]);
   const list = (games ?? []) as GameRow[];
   base.me = me;
   base.players = (players ?? []) as { id: string; nickname: string }[];
   base.gamesLeft = Math.max(0, 12 - list.length);
-  base.board = await board(r, s.table_id);
+  base.board = await board(r, sc.tableId ?? "");
 
   const g = list[0];
   base.serverNow = Date.now();
@@ -216,17 +245,18 @@ async function board(r: Restaurant, myTableId: string): Promise<TriviaSnapshot["
 
 const codeOf = (msg: string, codes: string[]) => codes.find((c) => msg.includes(c)) ?? "server_error";
 
-export async function triviaJoin(tableId: string, nickname: unknown): Promise<Result> {
-  const s = await guestSession(tableId);
-  if (!s) return fail("table_closed", 409);
-  if (await playerFor(tableId, s)) return { ok: true, value: undefined };
+export async function triviaJoin(sc: TriviaScope, nickname: unknown): Promise<Result> {
+  if (await playerFor(sc)) return { ok: true, value: undefined };
   const name = typeof nickname === "string" ? nickname.slice(0, 40) : "";
-  const { data, error } = await adminClient().rpc("tp_trivia_join", { p_session_id: s.id, p_nickname: name }).single();
+  const { data, error } =
+    sc.kind === "table"
+      ? await adminClient().rpc("tp_trivia_join", { p_session_id: sc.id, p_nickname: name }).single()
+      : await adminClient().rpc("tp_trivia_join_entry", { p_entry_id: sc.id, p_nickname: name }).single();
   if (error) {
     const code = codeOf(error.message, ["bad_name", "name_taken", "table_full", "not_found"]);
     return fail(code === "not_found" ? "trivia_off" : code, 409);
   }
-  (await cookies()).set(playerCookie(tableId), (data as { token: string }).token, {
+  (await cookies()).set(sc.cookie, (data as { token: string }).token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -236,20 +266,19 @@ export async function triviaJoin(tableId: string, nickname: unknown): Promise<Re
   return { ok: true, value: undefined };
 }
 
-export async function triviaStart(tableId: string): Promise<Result> {
-  const s = await guestSession(tableId);
-  if (!s) return fail("table_closed", 409);
-  const me = await playerFor(tableId, s);
+export async function triviaStart(sc: TriviaScope): Promise<Result> {
+  const me = await playerFor(sc);
   if (!me) return fail("join_first", 409);
-  const { error } = await adminClient().rpc("tp_trivia_start", { p_session_id: s.id, p_player_id: me.id }).single();
+  const { error } =
+    sc.kind === "table"
+      ? await adminClient().rpc("tp_trivia_start", { p_session_id: sc.id, p_player_id: me.id }).single()
+      : await adminClient().rpc("tp_trivia_start_entry", { p_entry_id: sc.id, p_player_id: me.id }).single();
   if (error) return fail(codeOf(error.message, ["game_running", "too_many_games", "no_questions", "not_found"]), 409);
   return { ok: true, value: undefined };
 }
 
-export async function triviaAnswer(tableId: string, b: Record<string, unknown>): Promise<Result> {
-  const s = await guestSession(tableId);
-  if (!s) return fail("table_closed", 409);
-  const me = await playerFor(tableId, s);
+export async function triviaAnswer(sc: TriviaScope, b: Record<string, unknown>): Promise<Result> {
+  const me = await playerFor(sc);
   if (!me) return fail("join_first", 409);
   const gameId = typeof b.gameId === "string" && UUID.test(b.gameId) ? b.gameId : null;
   const qIndex = typeof b.index === "number" && Number.isInteger(b.index) ? b.index : -1;
