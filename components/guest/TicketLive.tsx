@@ -20,6 +20,11 @@ type NavWithWake = Navigator & { wakeLock?: { request: (type: "screen") => Promi
 
 export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Locale; token: string; initial: TicketSnapshot }) {
   const { data, connected, clockOffset, refresh } = useLive(`/api/ticket/${token}`, initial);
+  // Staff just seated this party at a real table: move them to the table page.
+  const atTable = !!data.table?.atTable;
+  useEffect(() => {
+    if (atTable) window.location.replace(`/r/${data.restaurant.slug}/t/${token}/table`);
+  }, [atTable, data.restaurant.slug, token]);
   const now = useNow(clockOffset);
   const { entry: e, restaurant: r } = data;
   const slug = r.slug;

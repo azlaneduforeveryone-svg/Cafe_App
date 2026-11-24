@@ -370,9 +370,26 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
             orders: ((await allOrdersForEntries([e.id], true)).get(e.id) ?? []).filter((o) => o.kind === "table"),
             bill: await billForEntry(e),
             loyalty: tableIsOpen(e) ? await loyaltyPromo(r) : null,
+            atTable: tableIsOpen(e) && (await tableSessionForEntry(e.id)) !== null,
           }
         : null,
   };
+}
+
+/**
+ * The open table session a seated waitlist party belongs to (they were seated at a real table),
+ * or null. Holding the ticket link proves you're that party, so the ticket can hand over to it.
+ */
+export async function tableSessionForEntry(entryId: string): Promise<{ tableId: string; token: string } | null> {
+  const { data } = await adminClient()
+    .from("table_sessions")
+    .select("table_id, token, opened_at")
+    .eq("entry_id", entryId)
+    .is("closed_at", null)
+    .gte("opened_at", new Date(Date.now() - 8 * 3_600_000).toISOString())
+    .maybeSingle();
+  const s = data as { table_id: string; token: string } | null;
+  return s ? { tableId: s.table_id, token: s.token } : null;
 }
 
 // ---------------------------------------------------------------------------

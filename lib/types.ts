@@ -156,7 +156,7 @@ export interface TicketSnapshot {
   order: Order | null;
   hasMenu: boolean;
   /** Present after the guest is seated. */
-  table: { open: boolean; label: string; orders: Order[]; bill: Bill | null; loyalty: LoyaltyPromo | null } | null;
+  table: { open: boolean; label: string; orders: Order[]; bill: Bill | null; loyalty: LoyaltyPromo | null; atTable: boolean } | null;
 }
 
 export interface MenuCategory {
