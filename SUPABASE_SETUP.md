@@ -312,3 +312,30 @@ Why staff confirm: anyone can type a number. Guests never look up a balance by n
 - [ ] Members list shows full numbers to the owner only; delete a member removes them.
 - [ ] Free restaurant (no trial): Loyalty page shows the Pro notice and nothing is earned.
 - [ ] A bad number (e.g. 12345) on the bill sheet shows "That mobile number doesn't look right."
+
+---
+
+## Table trivia (migration 0010)
+
+**Run:** SQL Editor > paste `supabase/migrations/0010_trivia.sql` > Run. Safe to re-run (the built-in questions update in place). Needs 0009 first.
+
+What it adds:
+- `restaurants.trivia_on` (default on). `trivia_questions` with 38 built-in questions in EN/AR/UR (food, geography, science, general; no religion or politics) plus each restaurant's own questions. `trivia_players`, `trivia_games`, `trivia_answers`. RLS on, no policies, server key only.
+- `tp_trivia_join`: nickname per table (1 to 16 characters, unique at the table, max 8 players). The player token is kept in an httpOnly cookie.
+- `tp_trivia_start`: 8 questions (the table's unseen ones first, the restaurant's own questions preferred), 5 s countdown, max 12 games per table session.
+- `tp_trivia_answer`: the server decides which question is open (15 s to answer, then 5 s showing the answer). Right = 500 plus up to 500 for speed; wrong or late = 0. One answer per question.
+
+Anti-cheat: phones never receive the correct answer while a question is open; scores only include closed questions; answer order is shuffled per game. Privacy: nicknames are visible only to the same table; "Top tables today" shows table labels and scores only. No prizes are tied to trivia.
+
+### Checklist
+- [ ] Migration ran with no error; `select count(*) from trivia_questions where restaurant_id is null;` returns 38.
+- [ ] Guest at a table sees "Play trivia while you wait" under the menu button.
+- [ ] Two phones on the same table QR: both join with different nicknames; the same nickname twice is refused.
+- [ ] One phone taps Start game: both phones show the countdown, then the same question at the same time.
+- [ ] Answer on one phone: it shows "Locked in. 1 of 2 answered." The other phone does not see the correct answer until the timer ends.
+- [ ] After 15 s both phones show the right answer in green, the points, and the scores.
+- [ ] After 8 questions: winner screen, Play again works, and the next game has different questions.
+- [ ] A phone on a different table sees the first table on "Top tables today" by label and score, with no nicknames.
+- [ ] Dashboard > Trivia: add a question about the restaurant; it appears in the next game, with its answers in a shuffled order.
+- [ ] Turn Trivia off: the guest button disappears and the API refuses to join.
+- [ ] Close the table: the trivia screen says the table is closed.

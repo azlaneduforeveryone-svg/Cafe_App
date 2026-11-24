@@ -37,6 +37,7 @@ export interface Restaurant {
   createdAt: number;
   logoPath: string | null;
   loyalty: LoyaltySettings;
+  triviaOn: boolean;
 }
 
 export interface Staff {

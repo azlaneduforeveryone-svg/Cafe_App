@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { BellRing, BookOpen, Check, Copy, Droplets, HandHelping, Lock, Receipt, ShoppingBag, Utensils, Wifi, X } from "lucide-react";
+import { BellRing, BookOpen, Brain, Check, Copy, Droplets, HandHelping, Lock, Receipt, ShoppingBag, Utensils, Wifi, X } from "lucide-react";
 import { BillCard, BillSheet, ReceiptCard } from "./BillCard";
 import { MenuSheet } from "./MenuSheet";
+import { TriviaSheet } from "./TriviaSheet";
 import { OrderProgress } from "./OrderProgress";
 import { GuestFrame } from "./GuestFrame";
 import { useLive } from "@/components/useLive";
@@ -23,6 +24,7 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
   const [serviceOpen, setServiceOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [billSheet, setBillSheet] = useState(false);
+  const [trivia, setTrivia] = useState(false);
   const d = t as unknown as Record<string, string>;
   const open = data.open && !gone;
   const bill = data.bill;
@@ -90,6 +92,22 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
           >
             <BookOpen className="w-5 h-5" aria-hidden />
             {pending ? t.updateTableOrder : t.orderMore}
+          </button>
+        )}
+
+        {data.triviaOn && !paid && (
+          <button
+            type="button"
+            onClick={() => setTrivia(true)}
+            className="w-full p-4 rounded-2xl bg-ink text-white flex items-center gap-3 text-start shadow-lg"
+          >
+            <span className="w-11 h-11 rounded-xl bg-gold/20 flex items-center justify-center shrink-0">
+              <Brain className="w-6 h-6 text-gold" aria-hidden />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-extrabold">{t.trvCta}</span>
+              <span className="block text-xs text-white/70">{t.trvCtaSub}</span>
+            </span>
           </button>
         )}
 
@@ -176,6 +194,8 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
           {t.callWaiter}
         </button>
       </div>
+
+      {trivia && <TriviaSheet t={t} locale={locale} tableId={tableId} onClose={() => setTrivia(false)} />}
 
       {billSheet && bill && (
         <BillSheet t={t} locale={locale} bill={bill} currency={data.currency} country={data.restaurant.country} endpoint={billEndpoint} loyalty={data.loyalty} onClose={() => setBillSheet(false)} onSent={() => void refresh()} />

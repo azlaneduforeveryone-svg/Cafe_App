@@ -79,6 +79,7 @@ export interface TableGuestSnapshot {
   bill: Bill | null;
   /** How loyalty works here (for the bill sheet), or null when off. */
   loyalty: LoyaltyPromo | null;
+  triviaOn: boolean;
 }
 
 interface TableRow {
@@ -285,6 +286,7 @@ export async function guestSnapshot(tableId: string, anySession: SessionRow | nu
     currency: currencyOf(r),
     bill: s || bill?.status === "paid" ? bill : null,
     loyalty: s ? await loyaltyPromo(r) : null,
+    triviaOn: r.triviaOn,
   };
 }
 
@@ -330,7 +332,7 @@ export async function raiseAlert(s: SessionRow, type: unknown): Promise<Result> 
 // Staff floor
 // ---------------------------------------------------------------------------
 
-function startOfBusinessDay(r: Restaurant) {
+export function startOfBusinessDay(r: Pick<Restaurant, "country">) {
   const off = (r.country === "SA" ? 180 : 300) * 60_000;
   const day = 86_400_000;
   const cutoff = 4 * 3_600_000;
