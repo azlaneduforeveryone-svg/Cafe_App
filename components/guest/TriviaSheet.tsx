@@ -106,10 +106,10 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
         <div className="flex-1 px-5 pb-6 space-y-5">
           {gone && <p className="text-center py-10 text-white/70">{t.trvErr_table_closed}</p>}
           {!gone && !snap && <p className="text-center py-10 text-white/60">…</p>}
-          {snap && !snap.on && <p className="text-center py-10 text-white/70">{t.trvErr_trivia_off}</p>}
+          {!gone && snap && !snap.on && <p className="text-center py-10 text-white/70">{t.trvErr_trivia_off}</p>}
 
           {/* Join */}
-          {snap?.on && !snap.me && (
+          {!gone && snap?.on && !snap.me && (
             <form
               className="space-y-3 pt-4"
               onSubmit={(e) => {
@@ -136,7 +136,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
           )}
 
           {/* Lobby */}
-          {snap?.on && snap.me && (!g || (live?.phase === "done" && !g.scores.length)) && (
+          {!gone && snap?.on && snap.me && (!g || (live?.phase === "done" && !g.scores.length)) && (
             <div className="space-y-4 pt-2">
               <Players t={t} players={snap.players} myId={myId} />
               <p className="text-sm text-white/70">{t.trvRules}</p>
@@ -153,7 +153,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
           )}
 
           {/* Countdown */}
-          {g && live?.phase === "countdown" && (
+          {!gone && g && live?.phase === "countdown" && (
             <div className="text-center py-14 space-y-2">
               <p className="text-white/70 font-bold">{t.trvGetReady}</p>
               <p className="text-7xl font-extrabold text-gold tabular-nums" aria-live="polite">
@@ -163,7 +163,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
           )}
 
           {/* Question / reveal */}
-          {g && live && (live.phase === "question" || live.phase === "reveal") && (
+          {!gone && g && live && (live.phase === "question" || live.phase === "reveal") && (
             <div className="space-y-4">
               <div className="flex items-center justify-between text-sm font-bold text-white/70">
                 <span>{fmt(t.trvQuestionOf, { n: live.index + 1, total: g.total })}</span>
@@ -218,7 +218,7 @@ export function TriviaSheet({ t, locale, tableId, onClose }: { t: Dict; locale: 
           )}
 
           {/* Final */}
-          {g && live?.phase === "done" && g.scores.length > 0 && (
+          {!gone && g && live?.phase === "done" && g.scores.length > 0 && (
             <div className="space-y-4 pt-2">
               <p className="text-center">
                 <Trophy className="w-10 h-10 text-gold mx-auto" aria-hidden />

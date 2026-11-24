@@ -339,3 +339,30 @@ Anti-cheat: phones never receive the correct answer while a question is open; sc
 - [ ] Dashboard > Trivia: add a question about the restaurant; it appears in the next game, with its answers in a shuffled order.
 - [ ] Turn Trivia off: the guest button disappears and the API refuses to join.
 - [ ] Close the table: the trivia screen says the table is closed.
+
+---
+
+## Demo restaurant: Zaffran & Ember Grill (Phase 5)
+
+**Run (after all migrations up to 0010):** `node --env-file=.env.local scripts/seed-demo.mjs`. Safe to run again: it resets the demo every time.
+
+What it sets up for `/r/zaffran-ember` (Pakistan, PKR, Pro by hand so every feature shows):
+- 3 waiting guests, 5 weeks of past visits for Reports.
+- Menu in EN/AR/UR: Tandoor, Curry, Drinks, Desserts plus a deal. Kitchen stations, Half/Full sizes, spice levels, allergens, an upsell (butter chicken suggests garlic naan) and one dish sold out until tomorrow.
+- Tables T1 to T6 with a live floor: T1 order waiting for approval, T2 eating, T3 bill requested (10% tip, split 3, Easypaisa, loyalty number), T4 cooking with tandoor done and a help call, T5 cooking (the demo guest table), T6 free.
+- Guest Wi-Fi, a stamp card (8 stamps, minimum PKR 1,000, two rewards, three made-up members), three of the restaurant's own trivia questions.
+- With `SHOW_DEMO_LOGIN=1`, the restaurant page shows "Try the demo" with three links: Table 5 guest view, Floor and Kitchen (login then straight to that screen).
+
+The demo login and the Table 5 link are public while `SHOW_DEMO_LOGIN=1`. Anyone can change the demo; run the seed again to reset it. Turn `SHOW_DEMO_LOGIN` off before real restaurants use the site.
+
+Also in this delivery: `/login?next=` (only dashboard pages are allowed, so it can't send people to another site), and the trivia screen now shows only "table closed" when the table closes.
+
+### Checklist
+- [ ] Seed ran and printed "Demo ready." Running it a second time also works.
+- [ ] `/r/zaffran-ember` shows "Try the demo" with three links (and the login line) when `SHOW_DEMO_LOGIN=1`; without it, no panel.
+- [ ] "Table 5: guest view" opens T5 with the cooking round, Wi-Fi card, menu (Seekh Kebab sold out), trivia and bill.
+- [ ] "Floor (staff)": login form, then lands on Floor (not the queue). T1 to T6 show the six states above; T3 Mark paid shows "Guest's number: ••0101" and Tariq with 7 stamps.
+- [ ] "Kitchen screen": lands on Kitchen; T4 shows tandoor ready and curry still cooking.
+- [ ] `/login?next=https://example.com` goes to /dashboard, not to example.com.
+- [ ] Guest at T5 menu: Butter Chicken offers Half/Full and suggests Garlic Naan; Chicken Tikka offers spice levels.
+- [ ] Trivia on T5 includes a Zaffran & Ember question within a game or two.

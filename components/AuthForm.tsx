@@ -15,12 +15,15 @@ export function AuthForm({
   defaultCountry,
   demo,
   initialError,
+  next = "/dashboard",
 }: {
   mode: "login" | "signup";
   t: Dict;
   defaultCountry: Country;
   demo?: { email: string; password: string };
   initialError?: string;
+  /** Already checked on the server (dashboard pages only). */
+  next?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -45,7 +48,7 @@ export function AuthForm({
         return;
       }
       if (res.ok) {
-        router.push("/dashboard");
+        router.push(next);
         router.refresh();
         return;
       }

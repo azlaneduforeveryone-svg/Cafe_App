@@ -2,13 +2,14 @@ import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 import { AuthShell } from "@/components/AuthShell";
 import { getStaff } from "@/lib/auth";
-import { DEMO_EMAIL, DEMO_PASSWORD, showDemoLogin } from "@/lib/demo";
+import { DEMO_EMAIL, DEMO_PASSWORD, safeNext, showDemoLogin } from "@/lib/demo";
 import { dict } from "@/lib/i18n";
 import { hostLocale } from "@/lib/locale";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  if (await getStaff()) redirect("/dashboard");
-  const { error } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; next?: string }> }) {
+  const { error, next } = await searchParams;
+  const dest = safeNext(next);
+  if (await getStaff()) redirect(dest);
   const locale = await hostLocale();
   const t = dict(locale);
   return (
@@ -19,6 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         defaultCountry="PK"
         initialError={error === "link" ? t.errLink : undefined}
         demo={showDemoLogin() ? { email: DEMO_EMAIL, password: DEMO_PASSWORD } : undefined}
+        next={dest}
       />
     </AuthShell>
   );
