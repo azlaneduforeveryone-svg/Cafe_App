@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   }
   const { plan } = await readBody(req);
   if (plan !== "free" && plan !== "pro") return fail("bad_plan", 400);
-  return withStaff(async ({ restaurant }) => {
+  return withStaff("billing.manage", async ({ restaurant }) => {
     const res = await setPlan(restaurant, plan);
     if (!res.ok) return fail(res.error, res.status);
     return json({ ok: true });

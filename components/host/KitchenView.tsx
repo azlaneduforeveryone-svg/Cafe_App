@@ -15,7 +15,7 @@ const AMBER = 10 * 60;
 const RED = 18 * 60;
 
 /** High-contrast kitchen display: one column per station, oldest ticket first. */
-export function KitchenView({ t, locale, initial }: { t: Dict; locale: Locale; initial: KitchenSnapshot }) {
+export function KitchenView({ t, locale, initial, canAct = true }: { t: Dict; locale: Locale; initial: KitchenSnapshot; canAct?: boolean }) {
   const { data, gone, clockOffset, refresh } = useLive("/api/host/kitchen", initial);
   const now = useNow(clockOffset);
   const router = useRouter();
@@ -95,6 +95,7 @@ export function KitchenView({ t, locale, initial }: { t: Dict; locale: Locale; i
                       {tk.note && <p className="mt-3 text-sm bg-amber-300/15 text-amber-200 rounded-lg px-2.5 py-1.5">{tk.note}</p>}
                       <button
                         type="button"
+                        hidden={!canAct}
                         disabled={busy === key}
                         onClick={() => ready(tk)}
                         className="mt-4 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-base font-extrabold flex items-center justify-center gap-2"

@@ -11,7 +11,7 @@ import { FREE_LIMIT } from "@/lib/queue";
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
-  const { staff, restaurant: r } = await requireStaff();
+  const { staff, restaurant: r } = await requireStaff("billing.manage");
   const locale = await hostLocale();
   const t = dict(locale);
   const { checkout } = await searchParams;

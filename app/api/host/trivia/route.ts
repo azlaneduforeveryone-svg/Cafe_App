@@ -2,13 +2,12 @@ import { fail, json, readBody, withStaff } from "@/lib/api";
 import { deleteHouseQuestion, listHouseQuestions, saveHouseQuestion, setTriviaOn } from "@/lib/trivia";
 
 export async function GET() {
-  return withStaff(async ({ restaurant }) => json({ questions: await listHouseQuestions(restaurant.id) }));
+  return withStaff("trivia.manage", async ({ restaurant }) => json({ questions: await listHouseQuestions(restaurant.id) }));
 }
 
 /** { on: boolean } toggles trivia; otherwise creates / updates ({ id }) one of the restaurant's own questions. */
 export async function POST(req: Request) {
-  return withStaff(async ({ staff, restaurant }) => {
-    if (staff.role !== "owner") return fail("owner_only", 403);
+  return withStaff("trivia.manage", async ({ restaurant }) => {
     const b = await readBody(req);
     if (typeof b.on === "boolean") {
       const res = await setTriviaOn(restaurant, b.on);
@@ -20,8 +19,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withStaff(async ({ staff, restaurant }) => {
-    if (staff.role !== "owner") return fail("owner_only", 403);
+  return withStaff("trivia.manage", async ({ restaurant }) => {
     const res = await deleteHouseQuestion(restaurant, new URL(req.url).searchParams.get("id") ?? "");
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   });

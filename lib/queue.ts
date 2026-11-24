@@ -59,6 +59,7 @@ interface RestaurantRow {
   stamp_min_spend?: string | number | null;
   spend_per_point?: string | number | null;
   trivia_on?: boolean | null;
+  waiter_scope?: "all" | "assigned" | null;
 }
 
 interface EntryRow {
@@ -121,6 +122,7 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
       spendPerPoint: Number(row.spend_per_point ?? 10),
     },
     triviaOn: row.trivia_on ?? true,
+    waiterScope: row.waiter_scope === "assigned" ? "assigned" : "all",
   };
 }
 

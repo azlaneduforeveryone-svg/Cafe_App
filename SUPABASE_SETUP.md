@@ -366,3 +366,33 @@ Also in this delivery: `/login?next=` (only dashboard pages are allowed, so it c
 - [ ] `/login?next=https://example.com` goes to /dashboard, not to example.com.
 - [ ] Guest at T5 menu: Butter Chicken offers Half/Full and suggests Garlic Naan; Chicken Tikka offers spice levels.
 - [ ] Trivia on T5 includes a Zaffran & Ember question within a game or two.
+
+---
+
+## Staff roles, invites and activity log (migration 0011, Phase 6a)
+
+**Run:** SQL Editor > paste `supabase/migrations/0011_staff_roles.sql` > Run. Safe to re-run. Needs 0010 first.
+
+Roles: **Owner** (one per restaurant, plan and billing), **Manager** (everything except billing; invites reception and waiters), **Reception** (waitlist, seating, tables, calls, mark paid and loyalty rewards), **Waiter** (tables, table orders, served, calls, kitchen view). Only Owner and Manager see Reports, revenue, the menu editor, loyalty member phone numbers, settings and staff. The full table is in `lib/permissions.ts`; every staff API route must name a permission, and pages redirect people to their own first screen.
+
+What the migration adds:
+- `staff.role` now owner / manager / reception / waiter (the unused "host" becomes reception), one owner per restaurant, `staff.phone`.
+- `restaurants.waiter_scope` (all / assigned) and `restaurant_tables.assigned_staff_id` (tables assigned to real staff).
+- `staff_invites`: one-time links, 48 hours, only a hash of the token is stored. `tp_accept_invite` claims it once, re-checks seats (Free: owner + 2, Pro: 20) and refuses a login that already belongs to a restaurant.
+- `staff_activity`: who marked paid, gave a reward, accepted or cancelled an order, added, changed, priced or deleted a dish, changed stock, closed a table, deleted a loyalty member, and staff changes.
+
+Invites by mobile need no SMS: the manager gets the link and a WhatsApp button. Mobile staff log in with their number and password (internally `p<number>@phone.tablepulse.invalid`, an address that can never receive mail). Forgot password for them = the manager sends a new invite after removing the old login.
+
+### Checklist
+- [ ] Migration ran with no error; the existing owner still logs in and sees everything.
+- [ ] Staff page: invite a **Waiter by mobile** (05… or 03…). Open the link in another browser, set a password: it lands on Floor. Log out, log in with the **mobile number** and password.
+- [ ] Invite a **Reception by email**; accept; it lands on the waitlist.
+- [ ] Opening the same invite link again says it doesn't work.
+- [ ] Free restaurant: a third staff invite is refused ("All staff places are used").
+- [ ] Waiter: top menu shows only Live queue, Floor, Kitchen. No Revenue tile on Floor. No Mark paid button. Can accept a table order and mark served. Kitchen shows tickets without the Ready button. Opening /dashboard/reports sends them to Floor.
+- [ ] Reception: sees Live queue and Floor; can seat, notify, Mark paid; no Revenue tile; no Reports / Menu / Staff in the menu; /dashboard/menu redirects.
+- [ ] API check with the waiter's login: `GET /api/host/reports/export` returns 403; `POST /api/host/bills` returns 403.
+- [ ] Manager: sees Reports and revenue, can invite reception and waiters, cannot see Plans, cannot invite or remove a manager.
+- [ ] Staff page > Waiters see: "Only their tables". Assign T2 to the waiter in Floor > Manage tables. The waiter's Floor shows only T2; acting on another table's order returns `not_your_table`.
+- [ ] Activity shows: invite, join, a price change, a mark paid with amount and table.
+- [ ] Remove the waiter: their next page load sends them to login.

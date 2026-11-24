@@ -102,8 +102,17 @@ export function AuthForm({
           </Field>
         </>
       )}
-      <Field label={t.email}>
-        <input name="email" type="email" required dir="ltr" autoComplete="email" defaultValue={demo?.email} className={input} />
+      <Field label={mode === "login" ? t.emailOrMobile : t.email}>
+        <input
+          name="email"
+          type={mode === "login" ? "text" : "email"}
+          inputMode={mode === "login" ? "email" : undefined}
+          required
+          dir="ltr"
+          autoComplete={mode === "login" ? "username" : "email"}
+          defaultValue={demo?.email}
+          className={input}
+        />
       </Field>
       <Field label={t.password} help={mode === "signup" ? t.passwordHelp : undefined}>
         <input

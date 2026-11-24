@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
+import { can, type Permission, type Role } from "@/lib/permissions";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
@@ -15,7 +16,9 @@ import type { HostAction, HostEntry, HostSnapshot, HostTable, Locale, Order, Pay
 
 const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ember";
 
-export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale; initial: HostSnapshot }) {
+export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: Locale; initial: HostSnapshot; role: Role }) {
+  // Buttons follow the role; the server checks every action again.
+  const may = (p: Permission) => can(role, p);
   const { data, connected, gone, clockOffset, refresh } = useLive("/api/host/snapshot", initial);
   const now = useNow(clockOffset);
   const { restaurant: r, entries, stats } = data;
@@ -152,6 +155,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
               onOrder={(tb, id, action) => orderAct(tb, id, action)}
               onTable={tableAct}
               onPay={setPaying}
+              may={may}
             />
           ) : (
           <div className="bg-white rounded-3xl border border-line shadow-xl overflow-hidden">
@@ -194,6 +198,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                 </h1>
                 <button
                   type="button"
+                  hidden={!may("queue.manage")}
                   onClick={() => setWalkIn(true)}
                   className="px-3.5 py-2 rounded-xl bg-ember hover:bg-ember-dark text-white text-xs font-extrabold shadow-sm flex items-center gap-1.5"
                 >
@@ -268,7 +273,7 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0" hidden={!may("queue.manage")}>
                           <button
                             type="button"
                             disabled={pending === e.id}
@@ -305,6 +310,8 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
                             order={e.order}
                             currency={r.currency}
                             onAction={(action) => orderAct(e, e.order?.id, action)}
+                            canDecide={may("orders.pre")}
+                            canServe={may("orders.serve")}
                           />
                         )}
                       </li>
@@ -553,6 +560,8 @@ function OrderPanel({
   currency,
   title,
   onAction,
+  canDecide,
+  canServe,
 }: {
   t: Dict;
   locale: Locale;
@@ -560,6 +569,8 @@ function OrderPanel({
   currency: string;
   title?: string;
   onAction: (action: "accept" | "cancel" | "served") => void;
+  canDecide: boolean;
+  canServe: boolean;
 }) {
   const [open, setOpen] = useState(order.status === "submitted" || (!!order.readyAt && !order.servedAt));
   const count = order.items.reduce((n, l) => n + l.qty, 0);
@@ -595,15 +606,17 @@ function OrderPanel({
             </p>
           )}
           <div className="flex justify-end gap-2">
+            {canDecide && (
             <button type="button" onClick={() => onAction("cancel")} className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
               {t.cancelOrder}
             </button>
-            {accepted && !order.servedAt && (
+            )}
+            {canServe && accepted && !order.servedAt && (
               <button type="button" onClick={() => onAction("served")} className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-extrabold">
                 {t.markServed} ✓
               </button>
             )}
-            {!accepted && (
+            {canDecide && !accepted && (
               <button type="button" onClick={() => onAction("accept")} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
                 {t.acceptOrder}
               </button>
@@ -625,6 +638,7 @@ function TablesPanel({
   onOrder,
   onTable,
   onPay,
+  may,
 }: {
   t: Dict;
   locale: Locale;
@@ -635,6 +649,7 @@ function TablesPanel({
   onOrder: (tb: HostTable, orderId: string, action: "accept" | "cancel" | "served") => void;
   onTable: (tb: HostTable, body: { label?: string; close?: boolean }) => void;
   onPay: (tb: HostTable) => void;
+  may: (p: Permission) => boolean;
 }) {
   const [closing, setClosing] = useState<string | null>(null);
   if (!tables.length) {
@@ -675,6 +690,7 @@ function TablesPanel({
                   {t.tableNo}
                   <input
                     key={tb.label}
+                    disabled={!may("floor.tables")}
                     defaultValue={tb.label}
                     maxLength={12}
                     onBlur={(ev) => ev.target.value.trim() !== tb.label && onTable(tb, { label: ev.target.value.trim() })}
@@ -700,12 +716,12 @@ function TablesPanel({
                   </span>
                 ) : (
                   <>
-                  {total > 0 && tb.bill?.status !== "paid" && (
+                  {may("bills.pay") && total > 0 && tb.bill?.status !== "paid" && (
                     <button type="button" onClick={() => onPay(tb)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">
                       {t.markPaid}
                     </button>
                   )}
-                  <button type="button" title={t.closeTableConfirm} onClick={() => setClosing(tb.id)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs font-bold text-stone-600 hover:bg-stone-50">
+                  <button type="button" hidden={!may("floor.tables")} title={t.closeTableConfirm} onClick={() => setClosing(tb.id)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs font-bold text-stone-600 hover:bg-stone-50">
                     {t.closeTable}
                   </button>
                   </>
@@ -726,6 +742,8 @@ function TablesPanel({
                 currency={currency}
                 title={o.kind === "pre" ? t.preOrderTag : fmt(t.roundN, { n: o.round })}
                 onAction={(action) => onOrder(tb, o.id, action)}
+                canDecide={may(o.kind === "pre" ? "orders.pre" : "orders.table")}
+                canServe={may("orders.serve")}
               />
             ))}
           </li>

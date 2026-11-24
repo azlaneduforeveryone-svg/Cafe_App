@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { fail, json, readBody } from "@/lib/api";
+import { loginEmailFor } from "@/lib/staff";
 
 export async function POST(req: Request) {
   const b = await readBody(req);
-  const email = typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
+  // "Email or mobile": staff invited by mobile log in with their number.
+  const email = typeof b.email === "string" ? await loginEmailFor(b.email) : null;
   const password = typeof b.password === "string" ? b.password : "";
   if (!email || !password) return fail("invalid", 401);
 

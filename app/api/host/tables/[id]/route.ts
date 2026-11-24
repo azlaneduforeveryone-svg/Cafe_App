@@ -5,7 +5,7 @@ import { updateTable } from "@/lib/menu";
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readBody(req);
-  return withStaff(async ({ restaurant }) => {
+  return withStaff("floor.tables", async ({ restaurant }) => {
     const res = await updateTable(restaurant, id, body);
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   });

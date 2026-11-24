@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const file = form?.get("file");
   const kind = form?.get("kind") === "logo" ? "logo" : "item";
   if (!(file instanceof File)) return fail("no_file", 400);
-  return withStaff(async ({ restaurant }) => {
+  return withStaff(kind === "logo" ? "settings.manage" : "menu.edit", async ({ restaurant }) => {
     const up = await uploadImage(restaurant.id, kind, file);
     if (!up.ok) return fail(up.error, up.status);
     if (kind === "logo") {

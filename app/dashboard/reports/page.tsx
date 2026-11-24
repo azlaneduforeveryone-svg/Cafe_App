@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 type Search = Record<string, string | string[] | undefined>;
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  const { restaurant: r } = await requireStaff();
+  const { restaurant: r } = await requireStaff("reports.view");
   const locale = await hostLocale();
   const t = dict(locale);
   const range = parseRange(r.country, await searchParams);

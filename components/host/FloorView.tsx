@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { BellRing, ChefHat, Clock, Droplets, HandHelping, LayoutGrid, Plus, Printer, QrCode, Receipt, RefreshCw, Trash2, Users, Utensils, Wifi, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
+import { can, type Permission } from "@/lib/permissions";
 import type { PayMethod } from "@/lib/types";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
@@ -39,6 +40,9 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   const d = t as unknown as Record<string, string>;
   const [seating, setSeating] = useState<FloorTable | null>(null);
   const [paying, setPaying] = useState<FloorTable | null>(null);
+  // Buttons follow the role; the server checks every action again.
+  const may = (p: Permission) => can(data.viewer.role, p);
+  const myId = data.viewer.id;
   const [managing, setManaging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -84,11 +88,12 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   return (
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 space-y-5">
       {/* Shift header */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${data.kpis.revenueToday === null ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         <Kpi label={t.kpiActiveTables} value={`${data.kpis.activeTables}/${data.kpis.totalTables}`} />
         <Kpi label={t.kpiOrdersToday} value={String(data.kpis.ordersToday)} />
-        <Kpi label={t.kpiRevenueToday} value={money(data.kpis.revenueToday, data.currency)} />
+        {data.kpis.revenueToday !== null && <Kpi label={t.kpiRevenueToday} value={money(data.kpis.revenueToday, data.currency)} />}
         <Kpi label={t.kpiRatingToday} value={data.kpis.ratingToday === null ? "–" : `${data.kpis.ratingToday} ★ (${data.kpis.ratingsToday})`} />
+        {may("tables.manage") && (
         <div className="bg-white rounded-2xl border border-line p-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setManaging(true)} className="px-3 py-2 rounded-xl bg-ink text-white text-xs font-bold inline-flex items-center gap-1.5">
             <LayoutGrid className="w-4 h-4" aria-hidden />
@@ -99,6 +104,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
             {t.printQr}
           </Link>
         </div>
+        )}
       </div>
 
       {/* Calls */}
@@ -160,6 +166,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
                     ))}
                   </ul>
                   {o.note && <p className="mt-2 text-xs bg-cream rounded-lg px-2 py-1.5">{o.note}</p>}
+                  {may("orders.table") && (
                   <div className="flex justify-end gap-2 mt-3">
                     <button type="button" onClick={() => run(`/api/host/orders/${o.id}`, { action: "cancel" })} className="px-3 py-2 rounded-lg text-xs font-bold text-stone-600 hover:bg-red-50 hover:text-red-700">
                       {t.rejectOrder}
@@ -174,10 +181,11 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
                       {t.sendToKitchen}
                     </button>
                   </div>
+                  )}
                 </article>
               ))
           )}
-          <WifiForm t={t} initial={data.wifi} onSaved={refresh} />
+          {may("tables.manage") && <WifiForm t={t} initial={data.wifi} onSaved={refresh} />}
         </section>
 
         {/* Floor grid */}
@@ -185,10 +193,12 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
           {data.tables.length === 0 ? (
             <div className="bg-white rounded-3xl border border-line p-10 text-center space-y-3">
               <p className="text-sm text-stone-500">{t.noTablesYet}</p>
-              <button type="button" onClick={() => setManaging(true)} className="px-4 py-2.5 rounded-xl bg-ember text-white text-xs font-extrabold inline-flex items-center gap-1.5">
-                <Plus className="w-4 h-4" aria-hidden />
-                {t.addTable}
-              </button>
+              {may("tables.manage") && (
+                <button type="button" onClick={() => setManaging(true)} className="px-4 py-2.5 rounded-xl bg-ember text-white text-xs font-extrabold inline-flex items-center gap-1.5">
+                  <Plus className="w-4 h-4" aria-hidden />
+                  {t.addTable}
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -206,6 +216,8 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
                   onResolve={(a) => run(`/api/host/floor/alerts/${a.id}`, { action: "resolve" })}
                   onServed={(id) => run(`/api/host/orders/${id}`, { action: "served" })}
                   onPay={() => setPaying(tb)}
+                  may={may}
+                  mine={!!tb.staffId && tb.staffId === myId}
                 />
               ))}
             </div>
@@ -263,7 +275,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
         </Modal>
       )}
 
-      {managing && <ManageTables t={t} locale={locale} sections={data.sections} tables={data.tables} onClose={() => setManaging(false)} run={run} />}
+      {managing && <ManageTables t={t} locale={locale} sections={data.sections} tables={data.tables} staff={data.staff} onClose={() => setManaging(false)} run={run} />}
 
       {toast && (
         <div className="fixed bottom-5 inset-x-0 z-50 flex justify-center px-4 pointer-events-none" role="status" aria-live="polite">
@@ -295,6 +307,8 @@ function TableCard({
   onResolve,
   onServed,
   onPay,
+  may,
+  mine,
 }: {
   t: Dict;
   tb: FloorTable;
@@ -307,6 +321,9 @@ function TableCard({
   onResolve: (a: ServiceAlert) => void;
   onServed: (orderId: string) => void;
   onPay: () => void;
+  may: (p: Permission) => boolean;
+  /** Assigned to the person looking (waiters see theirs highlighted). */
+  mine: boolean;
 }) {
   const d = t as unknown as Record<string, string>;
   const st = STATUS_STYLE[tb.status];
@@ -321,7 +338,7 @@ function TableCard({
             <Users className="w-3 h-3" aria-hidden />
             {tb.capacity}
             {sectionLabel && <span>· {sectionLabel}</span>}
-            {tb.staffName && <span>· {tb.staffName}</span>}
+            {tb.staffName && <span className={mine ? "font-extrabold text-ember" : ""}>· {mine ? `${tb.staffName} (${t.mineLbl})` : tb.staffName}</span>}
           </p>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${st.badge}`}>{d[`tst_${tb.status}`]}</span>
@@ -345,7 +362,8 @@ function TableCard({
         <button
           key={a.id}
           type="button"
-          onClick={() => onResolve(a)}
+          onClick={() => may("floor.alerts") && onResolve(a)}
+          disabled={!may("floor.alerts")}
           title={t.resolve}
           className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-extrabold animate-pulse"
         >
@@ -362,6 +380,7 @@ function TableCard({
             key={o.id}
             type="button"
             onClick={() => onServed(o.id)}
+            hidden={!may("orders.serve")}
             className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-extrabold"
           >
             <span>{t.readyToServe}</span>
@@ -389,17 +408,19 @@ function TableCard({
             </>
           ) : (
             <>
-            {total > 0 && tb.bill?.status !== "paid" && (
+            {may("bills.pay") && total > 0 && tb.bill?.status !== "paid" && (
               <button type="button" onClick={onPay} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">
                 {t.markPaid}
               </button>
             )}
-            <button type="button" onClick={() => setConfirm(true)} title={t.closeTableConfirm} className="px-2.5 py-1.5 rounded-lg border border-line bg-white text-[11px] font-bold">
-              {t.closeTable}
-            </button>
+            {may("floor.tables") && (
+              <button type="button" onClick={() => setConfirm(true)} title={t.closeTableConfirm} className="px-2.5 py-1.5 rounded-lg border border-line bg-white text-[11px] font-bold">
+                {t.closeTable}
+              </button>
+            )}
             </>
           )
-        ) : (
+        ) : !may("floor.tables") ? null : (
           <>
             <button type="button" onClick={onSeat} className="px-2.5 py-1.5 rounded-lg bg-ink text-white text-[11px] font-bold">
               {t.seatParty}
@@ -451,6 +472,7 @@ function ManageTables({
   locale,
   sections,
   tables,
+  staff,
   onClose,
   run,
 }: {
@@ -458,10 +480,21 @@ function ManageTables({
   locale: Locale;
   sections: FloorSnapshot["sections"];
   tables: FloorTable[];
+  staff: FloorSnapshot["staff"];
   onClose: () => void;
   run: (url: string, body?: unknown, method?: string) => Promise<boolean>;
 }) {
-  const blank = { number: "", capacity: "4", sectionId: sections[0]?.id ?? "", staffName: "" };
+  const blank = { number: "", capacity: "4", sectionId: sections[0]?.id ?? "", staffId: "" };
+  const staffSelect = (value: string, onChange: (v: string) => void, label: string) => (
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={input}>
+      <option value="">{t.unassigned}</option>
+      {staff.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.name}
+        </option>
+      ))}
+    </select>
+  );
   const [draft, setDraft] = useState(blank);
   const [edits, setEdits] = useState<Record<string, typeof blank>>({});
   return (
@@ -475,8 +508,8 @@ function ManageTables({
           <span />
         </div>
         {tables.map((tb) => {
-          const v = edits[tb.id] ?? { number: tb.number, capacity: String(tb.capacity), sectionId: tb.sectionId, staffName: tb.staffName };
-          const changed = v.number !== tb.number || v.capacity !== String(tb.capacity) || v.sectionId !== tb.sectionId || v.staffName !== tb.staffName;
+          const v = edits[tb.id] ?? { number: tb.number, capacity: String(tb.capacity), sectionId: tb.sectionId, staffId: tb.staffId ?? "" };
+          const changed = v.number !== tb.number || v.capacity !== String(tb.capacity) || v.sectionId !== tb.sectionId || v.staffId !== (tb.staffId ?? "");
           const set = (k: keyof typeof blank, val: string) => setEdits({ ...edits, [tb.id]: { ...v, [k]: val } });
           return (
             <div key={tb.id} className="grid grid-cols-2 sm:grid-cols-[6rem_5rem_1fr_1fr_auto] gap-2 items-center">
@@ -489,7 +522,7 @@ function ManageTables({
                   </option>
                 ))}
               </select>
-              <input aria-label={t.staffLbl} value={v.staffName} maxLength={40} onChange={(e) => set("staffName", e.target.value)} className={input} placeholder={t.staffLbl} />
+              {staffSelect(v.staffId, (val) => set("staffId", val), t.staffLbl)}
               <div className="flex items-center gap-1">
                 {changed && (
                   <button
@@ -532,7 +565,7 @@ function ManageTables({
               </option>
             ))}
           </select>
-          <input placeholder={t.staffLbl} value={draft.staffName} maxLength={40} onChange={(e) => setDraft({ ...draft, staffName: e.target.value })} className={input} />
+          {staffSelect(draft.staffId, (val) => setDraft({ ...draft, staffId: val }), t.staffLbl)}
           <button type="submit" className="px-3 py-2 rounded-lg bg-ink text-white text-xs font-bold inline-flex items-center gap-1">
             <Plus className="w-4 h-4" aria-hidden />
             {t.addTable}

@@ -1,27 +1,43 @@
 import Link from "next/link";
-import { BarChart3, BookOpen, Brain, ChefHat, Crown, Gift, LayoutGrid, LayoutList, Settings, Zap } from "lucide-react";
+import { BarChart3, BookOpen, Brain, ChefHat, Crown, Gift, UserCog, LayoutGrid, LayoutList, Settings, Zap } from "lucide-react";
 import { Brand } from "./Brand";
 import { LangSwitch } from "./LangSwitch";
 import { LogoutButton } from "./LogoutButton";
 import { HOST_COOKIE } from "@/lib/locale";
 import { FREE_LIMIT, alertsUsedNow } from "@/lib/queue";
 import { restaurantName } from "@/lib/format";
+import { getStaff } from "@/lib/auth";
+import { can, type Permission } from "@/lib/permissions";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Restaurant } from "@/lib/types";
 
-export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale: Locale; restaurant: Restaurant; active: "queue" | "floor" | "kitchen" | "menu" | "loyalty" | "trivia" | "reports" | "settings" | "plans" }) {
+export async function HostTopBar({
+  t,
+  locale,
+  restaurant,
+  active,
+}: {
+  t: Dict;
+  locale: Locale;
+  restaurant: Restaurant;
+  active: "queue" | "floor" | "kitchen" | "menu" | "loyalty" | "trivia" | "reports" | "staff" | "settings" | "plans";
+}) {
   const alertsUsed = alertsUsedNow(restaurant);
-  const nav = [
-    { key: "queue", href: "/dashboard", label: t.dashboard, Icon: LayoutList },
-    { key: "floor", href: "/dashboard/floor", label: t.floorNav, Icon: LayoutGrid },
-    { key: "kitchen", href: "/dashboard/kitchen", label: t.kitchenNav, Icon: ChefHat },
-    { key: "menu", href: "/dashboard/menu", label: t.menuNav, Icon: BookOpen },
-    { key: "loyalty", href: "/dashboard/loyalty", label: t.loyaltyNav, Icon: Gift },
-    { key: "trivia", href: "/dashboard/trivia", label: t.triviaNav, Icon: Brain },
-    { key: "reports", href: "/dashboard/reports", label: t.reportsNav, Icon: BarChart3 },
-    { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings },
-    { key: "plans", href: "/dashboard/billing", label: t.plans, Icon: Crown },
+  const role = (await getStaff())?.staff.role;
+  const may = (p: Permission) => can(role, p);
+  const all = [
+    { key: "queue", href: "/dashboard", label: t.dashboard, Icon: LayoutList, perm: "queue.view" },
+    { key: "floor", href: "/dashboard/floor", label: t.floorNav, Icon: LayoutGrid, perm: "floor.view" },
+    { key: "kitchen", href: "/dashboard/kitchen", label: t.kitchenNav, Icon: ChefHat, perm: "kitchen.view" },
+    { key: "menu", href: "/dashboard/menu", label: t.menuNav, Icon: BookOpen, perm: "menu.edit" },
+    { key: "loyalty", href: "/dashboard/loyalty", label: t.loyaltyNav, Icon: Gift, perm: "loyalty.manage" },
+    { key: "trivia", href: "/dashboard/trivia", label: t.triviaNav, Icon: Brain, perm: "trivia.manage" },
+    { key: "reports", href: "/dashboard/reports", label: t.reportsNav, Icon: BarChart3, perm: "reports.view" },
+    { key: "staff", href: "/dashboard/staff", label: t.staffNav, Icon: UserCog, perm: "staff.manage" },
+    { key: "settings", href: "/dashboard/settings", label: t.settings, Icon: Settings, perm: "settings.manage" },
+    { key: "plans", href: "/dashboard/billing", label: t.plans, Icon: Crown, perm: "billing.manage" },
   ] as const;
+  const nav = all.filter((n) => may(n.perm));
   const atLimit = restaurant.plan === "free" && alertsUsed >= FREE_LIMIT;
 
   return (
@@ -49,6 +65,7 @@ export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale:
         </nav>
 
         <div className="flex items-center gap-2">
+          {may("billing.manage") && (
           <Link
             href="/dashboard/billing"
             className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
@@ -71,6 +88,7 @@ export function HostTopBar({ t, locale, restaurant, active }: { t: Dict; locale:
               </span>
             )}
           </Link>
+          )}
           <LangSwitch current={locale} cookie={HOST_COOKIE} />
           <LogoutButton label={t.logout} />
         </div>

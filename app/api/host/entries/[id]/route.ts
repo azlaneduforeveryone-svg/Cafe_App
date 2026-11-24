@@ -8,7 +8,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const { action } = await readBody(req);
   if (!ACTIONS.includes(action as HostAction)) return fail("bad_action", 400);
-  return withStaff(async ({ restaurant }) => {
+  return withStaff("queue.manage", async ({ restaurant }) => {
     const res = await hostAction(restaurant, id, action as HostAction);
     if (!res.ok) return fail(res.error, res.status);
     return json(res.value);

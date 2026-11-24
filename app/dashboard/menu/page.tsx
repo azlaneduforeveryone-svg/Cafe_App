@@ -7,7 +7,7 @@ import { hostLocale } from "@/lib/locale";
 import { getMenu } from "@/lib/menu";
 
 export default async function MenuPage() {
-  const { restaurant } = await requireStaff();
+  const { restaurant } = await requireStaff("menu.edit");
   const locale = await hostLocale();
   const t = dict(locale);
   return (

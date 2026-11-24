@@ -9,13 +9,13 @@ import { floorSnapshot } from "@/lib/tables";
 export const dynamic = "force-dynamic";
 
 export default async function FloorPage() {
-  const { restaurant } = await requireStaff();
+  const { staff, restaurant } = await requireStaff("floor.view");
   const locale = await hostLocale();
   const t = dict(locale);
   return (
     <LocaleRoot locale={locale}>
       <HostTopBar t={t} locale={locale} restaurant={restaurant} active="floor" />
-      <FloorView t={t} locale={locale} initial={await floorSnapshot(restaurant)} />
+      <FloorView t={t} locale={locale} initial={await floorSnapshot(restaurant, { userId: staff.userId, role: staff.role })} />
     </LocaleRoot>
   );
 }

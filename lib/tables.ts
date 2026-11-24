@@ -6,6 +6,7 @@ import { allOrdersForEntries, cartOf, currencyOf, hasMenu, toOrder } from "./men
 import { getRestaurantById, toPublic } from "./queue";
 import { RECEIPT_HOURS, billFor, billSummaries, ratingSince } from "./bills";
 import { loyaltyPromo } from "./loyalty";
+import { can, type Role } from "./permissions";
 import type { Bill, BillSummary, LoyaltyMode, LoyaltyPromo, Order, PublicRestaurant, Restaurant, Section } from "./types";
 
 /**
@@ -35,6 +36,7 @@ export interface DiningTable {
   capacity: number;
   sectionId: string;
   staffName: string;
+  staffId: string | null;
   sort: number;
 }
 export interface ServiceAlert {
@@ -58,10 +60,14 @@ export interface FloorSnapshot {
   country: Restaurant["country"];
   loyaltyMode: LoyaltyMode;
   sections: Section[];
+  viewer: { id: string; role: Role };
+  waiterScope: "all" | "assigned";
+  /** Staff list for assigning tables (managers only; empty for others). */
+  staff: { id: string; name: string; role: Role }[];
   tables: FloorTable[];
   /** Waitlist parties that can be seated at a table. */
   waiting: { id: string; ticketNumber: number; name: string; partySize: number; status: string; hasPreOrder: boolean }[];
-  kpis: { activeTables: number; totalTables: number; ordersToday: number; revenueToday: number; ratingToday: number | null; ratingsToday: number };
+  kpis: { activeTables: number; totalTables: number; ordersToday: number; revenueToday: number | null; ratingToday: number | null; ratingsToday: number };
   wifi: { ssid: string; password: string };
 }
 export interface TableGuestSnapshot {
@@ -89,6 +95,7 @@ interface TableRow {
   capacity: number;
   section_id: string;
   assigned_staff_name: string;
+  assigned_staff_id?: string | null;
   qr_secret: string;
   sort: number;
 }
@@ -116,6 +123,7 @@ const toTable = (r: TableRow): DiningTable => ({
   capacity: r.capacity,
   sectionId: r.section_id,
   staffName: r.assigned_staff_name,
+  staffId: r.assigned_staff_id ?? null,
   sort: r.sort,
 });
 const toAlert = (a: AlertRow): ServiceAlert => ({ id: a.id, tableId: a.table_id, type: a.alert_type, status: a.status, createdAt: Date.parse(a.created_at) });
@@ -143,11 +151,21 @@ function tableInput(r: Restaurant, b: Record<string, unknown>) {
   };
 }
 
+/** The assigned waiter must be staff of this restaurant; their name becomes the label. */
+async function withAssignee(r: Restaurant, b: Record<string, unknown>, v: NonNullable<ReturnType<typeof tableInput>>) {
+  if (!("staffId" in b)) return v;
+  if (typeof b.staffId !== "string" || !UUID.test(b.staffId)) return { ...v, assigned_staff_id: null, assigned_staff_name: "" };
+  const { data } = await adminClient().from("staff").select("user_id, name").eq("user_id", b.staffId).eq("restaurant_id", r.id).maybeSingle();
+  const st = data as { user_id: string; name: string } | null;
+  return st ? { ...v, assigned_staff_id: st.user_id, assigned_staff_name: st.name.slice(0, 40) } : { ...v, assigned_staff_id: null, assigned_staff_name: "" };
+}
+
 const dbErr = (m: string | undefined) => (m?.includes("duplicate") ? fail("duplicate_table", 409) : fail("server_error", 500));
 
 export async function createTable(r: Restaurant, b: Record<string, unknown>): Promise<Result> {
-  const v = tableInput(r, b);
-  if (!v) return fail("invalid", 400);
+  const v0 = tableInput(r, b);
+  if (!v0) return fail("invalid", 400);
+  const v = await withAssignee(r, b, v0);
   const { count } = await adminClient().from("restaurant_tables").select("id", { count: "exact", head: true }).eq("restaurant_id", r.id);
   if ((count ?? 0) >= 200) return fail("too_many", 409);
   const { error } = await adminClient().from("restaurant_tables").insert({ ...v, restaurant_id: r.id, sort: count ?? 0 });
@@ -158,8 +176,9 @@ export async function createTable(r: Restaurant, b: Record<string, unknown>): Pr
 
 export async function updateTable(r: Restaurant, id: string, b: Record<string, unknown>): Promise<Result> {
   if (!UUID.test(id)) return fail("not_found", 404);
-  const v = tableInput(r, b);
-  if (!v) return fail("invalid", 400);
+  const v0 = tableInput(r, b);
+  if (!v0) return fail("invalid", 400);
+  const v = await withAssignee(r, b, v0);
   const { data, error } = await adminClient()
     .from("restaurant_tables")
     .update({ ...v, updated_at: new Date().toISOString() })
@@ -339,7 +358,13 @@ export function startOfBusinessDay(r: Pick<Restaurant, "country">) {
   return Math.floor((Date.now() + off - cutoff) / day) * day + cutoff - off;
 }
 
-export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
+/** Who is looking: decides which tables a waiter sees and whether revenue is shown. */
+export interface Viewer {
+  userId: string;
+  role: Role;
+}
+
+export async function floorSnapshot(r: Restaurant, viewer: Viewer): Promise<FloorSnapshot> {
   const db = adminClient();
   const since = new Date(Date.now() - SESSION_HOURS * 3_600_000).toISOString();
   const [tables, sessions, alerts, today, waiting, rest] = await Promise.all([
@@ -400,6 +425,11 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
   });
   const acc = (today.data ?? []) as { total: string | number }[];
   const wifiRow = rest.data as { wifi_ssid: string; wifi_password: string } | null;
+  // "Waiters see only their tables": the manager's setting, applied here so other tables never reach the phone.
+  const visible = viewer.role === "waiter" && r.waiterScope === "assigned" ? floor.filter((t) => t.staffId === viewer.userId) : floor;
+  const { data: staffRows } = can(viewer.role, "tables.manage")
+    ? await db.from("staff").select("user_id, name, role").eq("restaurant_id", r.id).order("name")
+    : { data: [] };
   return {
     serverNow: Date.now(),
     channel: r.id,
@@ -407,7 +437,10 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
     country: r.country,
     loyaltyMode: r.loyalty.mode,
     sections: r.sections,
-    tables: floor,
+    viewer: { id: viewer.userId, role: viewer.role },
+    waiterScope: r.waiterScope,
+    staff: ((staffRows ?? []) as { user_id: string; name: string; role: Role }[]).map((x) => ({ id: x.user_id, name: x.name, role: x.role })),
+    tables: visible,
     waiting: ((waiting.data ?? []) as { id: string; ticket_number: number; name: string; party_size: number; status: string }[]).map((e) => ({
       id: e.id,
       ticketNumber: e.ticket_number,
@@ -420,7 +453,8 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
       activeTables: floor.filter((t) => t.session).length,
       totalTables: floor.length,
       ordersToday: acc.length,
-      revenueToday: Math.round(acc.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
+      // Revenue is for the owner and manager only.
+      revenueToday: can(viewer.role, "reports.view") ? Math.round(acc.reduce((s, o) => s + Number(o.total), 0) * 100) / 100 : null,
       ratingToday: rating.avg,
       ratingsToday: rating.count,
     },

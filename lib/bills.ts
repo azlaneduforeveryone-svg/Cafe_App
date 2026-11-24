@@ -202,6 +202,9 @@ export async function rateBill(src: BillSource, b: Record<string, unknown>): Pro
 /** Staff confirm payment for a table session or a seated ticket. Safe to tap twice. */
 export interface PaidResult {
   receiptNo: number | null;
+  total: number;
+  table: string | null;
+  rewardName: string | null;
   /** Loyalty problems never undo a payment; they come back here for staff to see. */
   loyaltyError: string | null;
   redeemed: boolean;
@@ -232,6 +235,7 @@ export async function markPaid(r: Restaurant, b: Record<string, unknown>): Promi
   // Loyalty: earn on the number staff typed, else the one the guest gave; then spend a reward if chosen.
   let loyaltyError: string | null = null;
   let redeemed = false;
+  let rewardName: string | null = null;
   if (r.loyalty.mode !== "off") {
     const phone = typeof b.phone === "string" && b.phone.trim() ? b.phone.trim().slice(0, 40) : null;
     let name = "";
@@ -246,11 +250,20 @@ export async function markPaid(r: Restaurant, b: Record<string, unknown>): Promi
       const memberId = earned.memberId ?? (typeof b.memberId === "string" ? b.memberId : null) ?? (phone ? await memberIdByPhone(r, phone) : null);
       const err = memberId ? await redeemReward(r, memberId, rewardId, bill.id) : "not_found";
       if (err) loyaltyError = loyaltyError ?? err;
-      else redeemed = true;
+      else {
+        redeemed = true;
+        const { data: w } = await adminClient().from("loyalty_rewards").select("name_en").eq("id", rewardId).maybeSingle();
+        rewardName = (w as { name_en: string } | null)?.name_en ?? null;
+      }
     }
   }
   await broadcastChange(r.id);
-  return { ok: true, value: { receiptNo: bill.receipt_no, loyaltyError, redeemed } };
+  let table: string | null = null;
+  if (bill.session_id) {
+    const { data: t } = await adminClient().from("table_sessions").select("restaurant_tables(table_number)").eq("id", bill.session_id).maybeSingle();
+    table = ((t as { restaurant_tables: { table_number: string } | null } | null)?.restaurant_tables?.table_number) ?? null;
+  }
+  return { ok: true, value: { receiptNo: bill.receipt_no, total: Number(bill.total), table, rewardName, loyaltyError, redeemed } };
 }
 
 /** Bills for the given table sessions / tickets, for staff screens. */

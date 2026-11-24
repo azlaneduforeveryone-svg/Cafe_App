@@ -38,6 +38,8 @@ export interface Restaurant {
   logoPath: string | null;
   loyalty: LoyaltySettings;
   triviaOn: boolean;
+  /** Waiters see every table, or only the ones assigned to them. */
+  waiterScope: "all" | "assigned";
 }
 
 export interface Staff {
@@ -45,7 +47,8 @@ export interface Staff {
   email: string;
   name: string;
   restaurantId: string;
-  role: "owner" | "host";
+  role: "owner" | "manager" | "reception" | "waiter";
+  phone: string;
 }
 
 export interface Entry {

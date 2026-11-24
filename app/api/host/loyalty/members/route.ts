@@ -1,18 +1,18 @@
 import { fail, json, withStaff } from "@/lib/api";
+import { logActivity } from "@/lib/activity";
 import { deleteMember, listMembers } from "@/lib/loyalty";
 
 /** Owner only: members include full phone numbers. */
 export async function GET(req: Request) {
-  return withStaff(async ({ staff, restaurant }) => {
-    if (staff.role !== "owner") return fail("owner_only", 403);
+  return withStaff("loyalty.members", async ({ restaurant }) => {
     return json(await listMembers(restaurant, new URL(req.url).searchParams.get("q") ?? ""));
   });
 }
 
 export async function DELETE(req: Request) {
-  return withStaff(async ({ staff, restaurant }) => {
-    if (staff.role !== "owner") return fail("owner_only", 403);
-    const res = await deleteMember(restaurant, new URL(req.url).searchParams.get("id") ?? "");
+  return withStaff("loyalty.members", async (ctx) => {
+    const res = await deleteMember(ctx.restaurant, new URL(req.url).searchParams.get("id") ?? "");
+    if (res.ok) await logActivity(ctx, "member_deleted", "");
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   });
 }

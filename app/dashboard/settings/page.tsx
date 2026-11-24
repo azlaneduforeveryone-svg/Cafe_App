@@ -11,7 +11,7 @@ import { dict } from "@/lib/i18n";
 import { hostLocale, siteOrigin } from "@/lib/locale";
 
 export default async function SettingsPage() {
-  const { restaurant: r } = await requireStaff();
+  const { restaurant: r } = await requireStaff("settings.manage");
   const locale = await hostLocale();
   const t = dict(locale);
   const origin = await siteOrigin();
