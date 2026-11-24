@@ -2,7 +2,8 @@ import "server-only";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { tableIsOpen } from "./menu";
-import { PAY_METHODS, type Bill, type BillLine, type BillSummary, type Country, type Entry, type PayMethod, type Restaurant } from "./types";
+import { earnForBill, maskPhone, memberIdByPhone, normalisePhone, receiptLoyalty, redeemReward } from "./loyalty";
+import { PAY_METHODS, type Bill, type BillLine, type BillSummary, type Entry, type LoyaltyReceipt, type PayMethod, type Restaurant } from "./types";
 
 /**
  * The bill: split, tip, how the guest will pay, staff confirming payment, receipt and rating.
@@ -44,6 +45,7 @@ interface BillRow {
   lines: BillLine[];
   requested_at: string | null;
   paid_at: string | null;
+  loyalty_phone?: string | null;
 }
 
 const money = (n: number) => Math.round(n * 100) / 100;
@@ -62,7 +64,7 @@ const toLines = (raw: unknown): BillLine[] =>
     spice: (l.spice as BillLine["spice"]) ?? null,
   }));
 
-function toBill(b: BillRow, rating: { stars: number; comment: string } | null): Bill {
+function toBill(b: BillRow, rating: { stars: number; comment: string } | null, loyalty: LoyaltyReceipt | null = null): Bill {
   const total = Number(b.total);
   return {
     id: b.id,
@@ -79,15 +81,17 @@ function toBill(b: BillRow, rating: { stars: number; comment: string } | null): 
     requestedAt: ts(b.requested_at),
     paidAt: ts(b.paid_at),
     rating,
+    loyaltyPhone: maskPhone(b.loyalty_phone),
+    loyalty,
   };
 }
 
 export const toSummary = (b: Bill | BillRow, stars: number | null = null): BillSummary => {
   if ("splitWays" in b) {
-    return { status: b.status === "paid" ? "paid" : "requested", subtotal: b.subtotal, tipAmount: b.tipAmount, total: b.total, splitWays: b.splitWays, perPerson: b.perPerson, method: b.method, receiptNo: b.receiptNo, stars: b.rating?.stars ?? stars };
+    return { status: b.status === "paid" ? "paid" : "requested", subtotal: b.subtotal, tipAmount: b.tipAmount, total: b.total, splitWays: b.splitWays, perPerson: b.perPerson, method: b.method, receiptNo: b.receiptNo, stars: b.rating?.stars ?? stars, loyaltyPhone: b.loyaltyPhone };
   }
   const total = Number(b.total);
-  return { status: b.status, subtotal: Number(b.subtotal), tipAmount: Number(b.tip_amount), total, splitWays: b.split_ways, perPerson: perPerson(total, b.split_ways), method: b.method, receiptNo: b.receipt_no, stars };
+  return { status: b.status, subtotal: Number(b.subtotal), tipAmount: Number(b.tip_amount), total, splitWays: b.split_ways, perPerson: perPerson(total, b.split_ways), method: b.method, receiptNo: b.receipt_no, stars, loyaltyPhone: maskPhone(b.loyalty_phone) };
 };
 
 async function findBill(src: BillSource): Promise<BillRow | null> {
@@ -105,8 +109,11 @@ export async function billFor(src: BillSource): Promise<Bill | null> {
   const row = await findBill(src);
   if (row) {
     if (row.status === "paid") {
-      const { data } = await adminClient().from("ratings").select("stars, comment").eq("bill_id", row.id).maybeSingle();
-      return toBill(row, (data as { stars: number; comment: string } | null) ?? null);
+      const [{ data }, loyalty] = await Promise.all([
+        adminClient().from("ratings").select("stars, comment").eq("bill_id", row.id).maybeSingle(),
+        receiptLoyalty(row.restaurant_id, row.id),
+      ]);
+      return toBill(row, (data as { stars: number; comment: string } | null) ?? null, loyalty);
     }
     // Requested: the guest may have had another round approved since; keep the figures current.
     const live = await linesFor(src);
@@ -131,6 +138,8 @@ export async function billFor(src: BillSource): Promise<Bill | null> {
     requestedAt: null,
     paidAt: null,
     rating: null,
+    loyaltyPhone: null,
+    loyalty: null,
   };
 }
 
@@ -146,11 +155,18 @@ const intIn = (v: unknown, lo: number, hi: number, dflt: number) => {
 };
 
 /** Guest asks for the bill, or changes tip / split / method before paying. */
-export async function requestBill(src: BillSource, country: Country, b: Record<string, unknown>): Promise<Result> {
+export async function requestBill(src: BillSource, r: Restaurant, b: Record<string, unknown>): Promise<Result> {
   if (!src.canRequest) return fail("table_closed", 409);
   const method = typeof b.method === "string" ? b.method : "";
-  if (!PAY_METHODS[country].includes(method as PayMethod)) return fail("bad_method", 400);
-  const { error } = await adminClient()
+  if (!PAY_METHODS[r.country].includes(method as PayMethod)) return fail("bad_method", 400);
+  // Optional loyalty number. Only stored on the bill; nothing is earned until staff mark it paid.
+  const rawPhone = typeof b.phone === "string" ? b.phone.trim() : "";
+  let phone: string | null | undefined;
+  if (r.loyalty.mode !== "off" && rawPhone) {
+    phone = await normalisePhone(r, rawPhone);
+    if (!phone) return fail("bad_phone", 400);
+  } else if (b.phone === "") phone = null;
+  const { data: billRow, error } = await adminClient()
     .rpc("tp_request_bill", {
       p_session_id: src.sessionId,
       p_entry_id: src.sessionId ? null : src.entryId,
@@ -164,6 +180,7 @@ export async function requestBill(src: BillSource, country: Country, b: Record<s
     if (error.message.includes("not_found")) return fail("table_closed", 409);
     return fail("server_error", 500);
   }
+  if (phone !== undefined && billRow) await adminClient().from("bills").update({ loyalty_phone: phone }).eq("id", (billRow as BillRow).id).eq("status", "requested");
   await broadcastChange(src.restaurantId);
   return { ok: true, value: undefined };
 }
@@ -183,7 +200,14 @@ export async function rateBill(src: BillSource, b: Record<string, unknown>): Pro
 }
 
 /** Staff confirm payment for a table session or a seated ticket. Safe to tap twice. */
-export async function markPaid(r: Restaurant, b: Record<string, unknown>): Promise<Result<{ receiptNo: number | null }>> {
+export interface PaidResult {
+  receiptNo: number | null;
+  /** Loyalty problems never undo a payment; they come back here for staff to see. */
+  loyaltyError: string | null;
+  redeemed: boolean;
+}
+
+export async function markPaid(r: Restaurant, b: Record<string, unknown>): Promise<Result<PaidResult>> {
   const method = typeof b.method === "string" && b.method ? b.method : null;
   if (method && (!ALL_METHODS.has(method) || !PAY_METHODS[r.country].includes(method as PayMethod))) return fail("bad_method", 400);
   let sessionId = typeof b.sessionId === "string" && UUID.test(b.sessionId) ? b.sessionId : null;
@@ -203,8 +227,30 @@ export async function markPaid(r: Restaurant, b: Record<string, unknown>): Promi
     if (error.message.includes("not_found")) return fail("not_found", 404);
     return fail("server_error", 500);
   }
+  const bill = data as BillRow;
+
+  // Loyalty: earn on the number staff typed, else the one the guest gave; then spend a reward if chosen.
+  let loyaltyError: string | null = null;
+  let redeemed = false;
+  if (r.loyalty.mode !== "off") {
+    const phone = typeof b.phone === "string" && b.phone.trim() ? b.phone.trim().slice(0, 40) : null;
+    let name = "";
+    if (bill.entry_id) {
+      const { data: e } = await adminClient().from("entries").select("name").eq("id", bill.entry_id).maybeSingle();
+      name = (e as { name: string } | null)?.name ?? "";
+    }
+    const earned = await earnForBill(r, bill.id, phone, name);
+    loyaltyError = earned.error;
+    const rewardId = typeof b.rewardId === "string" ? b.rewardId : null;
+    if (rewardId) {
+      const memberId = earned.memberId ?? (typeof b.memberId === "string" ? b.memberId : null) ?? (phone ? await memberIdByPhone(r, phone) : null);
+      const err = memberId ? await redeemReward(r, memberId, rewardId, bill.id) : "not_found";
+      if (err) loyaltyError = loyaltyError ?? err;
+      else redeemed = true;
+    }
+  }
   await broadcastChange(r.id);
-  return { ok: true, value: { receiptNo: (data as BillRow).receipt_no } };
+  return { ok: true, value: { receiptNo: bill.receipt_no, loyaltyError, redeemed } };
 }
 
 /** Bills for the given table sessions / tickets, for staff screens. */

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BellRing, ChefHat, Clock, Droplets, HandHelping, LayoutGrid, Plus, Printer, QrCode, Receipt, RefreshCw, Trash2, Users, Utensils, Wifi, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
-import { BillStrip, MarkPaidModal } from "./MarkPaid";
+import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
+import type { PayMethod } from "@/lib/types";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
@@ -69,6 +70,15 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
     if (!r.ok) show(errText(r.error));
     void refresh();
     return r.ok;
+  }
+
+  async function pay(sessionId: string, method: PayMethod, extras: PaidExtras) {
+    const res = await fetch("/api/host/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, method, ...extras }) }).catch(() => null);
+    const out = res ? ((await res.json().catch(() => ({}))) as { error?: string; receiptNo?: number; loyaltyError?: string | null }) : { error: "network" };
+    if (!res?.ok) show(errText(out.error));
+    else show(fmt(t.toastPaidTable, { r: out.receiptNo ?? "" }) + (out.loyaltyError ? ` · ${d[`loyErr_${out.loyaltyError}`] ?? t.loyErr_server_error}` : ""));
+    void refresh();
+    return !!res?.ok;
   }
 
   return (
@@ -211,7 +221,10 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
           currency={data.currency}
           bill={paying.bill?.status === "requested" ? paying.bill : null}
           fallbackTotal={paying.orders.filter((o) => o.status === "accepted").reduce((n, o) => n + o.total, 0)}
-          onConfirm={(method) => (paying.session ? run("/api/host/bills", { sessionId: paying.session.id, method }) : Promise.resolve(false))}
+          locale={locale}
+          loyaltyMode={data.loyaltyMode}
+          target={{ sessionId: paying.session?.id }}
+          onConfirm={(method, extras) => (paying.session ? pay(paying.session.id, method, extras) : Promise.resolve(false))}
           onClose={() => setPaying(null)}
         />
       )}

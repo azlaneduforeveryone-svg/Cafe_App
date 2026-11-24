@@ -285,3 +285,30 @@ TablePulse records how the guest pays; it does not take payment. Receipts say "N
 - [ ] Rating shows on the paid strip and in "Rating today" on the floor.
 - [ ] Waitlist Tables tab: seated ticket with approved food has Mark paid; ticket page shows bill and receipt.
 - [ ] PK restaurant shows Cash, Card, JazzCash, Easypaisa, Raast; SA shows Cash, Card, mada, Apple Pay, STC Pay, Google Pay.
+
+---
+
+## Loyalty: stamps or points by phone, confirmed by staff (migration 0009)
+
+**Run:** SQL Editor > paste `supabase/migrations/0009_loyalty.sql` > Run. Safe to re-run. Needs 0008 first.
+
+What it adds:
+- Restaurant settings: `loyalty_mode` (off, stamps, points), `stamps_needed` (3 to 20), `stamp_min_spend`, `spend_per_point`. Loyalty is Pro only (trial counts).
+- `loyalty_members` (one per phone per restaurant), `loyalty_rewards`, `loyalty_events` (earn and redeem history). RLS on, no policies, server key only.
+- `tp_norm_phone`: accepts 05.. / +966 for SA, 03.. / +92 for PK, other countries with +; Arabic and Urdu digits work.
+- `tp_loyalty_earn`: runs only after staff mark a bill paid. One earn per bill, max 3 per member in 24 hours. Stamps: 1 per bill at or above the minimum. Points: subtotal / spend per point (tip not counted).
+- `tp_loyalty_redeem`: staff only, checks the balance, logs the reward.
+
+Why staff confirm: anyone can type a number. Guests never look up a balance by number; they only see it on their own paid receipt. Staff see the member's name before giving a reward.
+
+### Checklist
+- [ ] Migration ran with no error.
+- [ ] Dashboard > Loyalty: choose Stamp card, 8 stamps, minimum 30, Save. Add reward "Free kunafa" in 3 languages.
+- [ ] Guest at a table: Get the bill shows "Collect a stamp every visit. 8 stamps = Free kunafa" and a mobile field. Enter 05XXXXXXXX and ask for the bill.
+- [ ] Floor: Mark paid shows "Guest's number: ••XXXX". After Payment received, the guest receipt shows "+1 stamp" and the stamp card.
+- [ ] Same number on a 4th paid bill within 24 hours: payment works, toast says the loyalty limit was reached.
+- [ ] With 8+ stamps, Mark paid offers "Free kunafa (8)". Choose it: balance drops by 8, Loyalty page shows "Rewards (24h): 1".
+- [ ] Switch to Points (spend per point 10): a SAR 55 bill gives 5 points.
+- [ ] Members list shows full numbers to the owner only; delete a member removes them.
+- [ ] Free restaurant (no trial): Loyalty page shows the Pro notice and nothing is earned.
+- [ ] A bad number (e.g. 12345) on the bill sheet shows "That mobile number doesn't look right."

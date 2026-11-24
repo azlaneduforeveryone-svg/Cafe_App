@@ -5,6 +5,6 @@ import { markPaid } from "@/lib/bills";
 export async function POST(req: Request) {
   return withStaff(async ({ restaurant }) => {
     const res = await markPaid(restaurant, await readBody(req));
-    return res.ok ? json({ ok: true, receiptNo: res.value.receiptNo }) : fail(res.error, res.status);
+    return res.ok ? json({ ok: true, ...res.value }) : fail(res.error, res.status);
   });
 }

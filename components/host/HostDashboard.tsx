@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
-import { BillStrip, MarkPaidModal } from "./MarkPaid";
+import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
 import { useLive, useNow } from "@/components/useLive";
 import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
@@ -92,10 +92,15 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
     void refresh();
   }
 
-  async function payAct(tb: HostTable, method: PayMethod) {
-    const res = await fetch("/api/host/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entryId: tb.id, method }) }).catch(() => null);
-    const out = res ? ((await res.json().catch(() => ({}))) as { error?: string; receiptNo?: number }) : {};
-    showToast(res?.ok ? fmt(t.toastPaid, { n: tb.ticketNumber, r: out.receiptNo ?? "" }) : out.error === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric);
+  async function payAct(tb: HostTable, method: PayMethod, extras: PaidExtras) {
+    const res = await fetch("/api/host/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entryId: tb.id, method, ...extras }) }).catch(() => null);
+    const out = res ? ((await res.json().catch(() => ({}))) as { error?: string; receiptNo?: number; loyaltyError?: string | null }) : {};
+    const d = t as unknown as Record<string, string>;
+    showToast(
+      res?.ok
+        ? fmt(t.toastPaid, { n: tb.ticketNumber, r: out.receiptNo ?? "" }) + (out.loyaltyError ? ` · ${d[`loyErr_${out.loyaltyError}`] ?? t.loyErr_server_error}` : "")
+        : out.error === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric,
+    );
     void refresh();
     return !!res?.ok;
   }
@@ -362,7 +367,10 @@ export function HostDashboard({ t, locale, initial }: { t: Dict; locale: Locale;
           currency={r.currency}
           bill={paying.bill?.status === "requested" ? paying.bill : null}
           fallbackTotal={paying.orders.filter((o) => o.status === "accepted").reduce((n, o) => n + o.total, 0)}
-          onConfirm={(m) => payAct(paying, m)}
+          locale={locale}
+          loyaltyMode={r.loyaltyMode}
+          target={{ entryId: paying.id }}
+          onConfirm={(m, extras) => payAct(paying, m, extras)}
           onClose={() => setPaying(null)}
         />
       )}

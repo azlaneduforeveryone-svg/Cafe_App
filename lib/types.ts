@@ -36,6 +36,7 @@ export interface Restaurant {
   nowServing: number;
   createdAt: number;
   logoPath: string | null;
+  loyalty: LoyaltySettings;
 }
 
 export interface Staff {
@@ -77,6 +78,8 @@ export interface PublicRestaurant {
   sections: Section[];
   gracePeriodMin: number;
   logoUrl: string | null;
+  /** "off" unless the owner turned loyalty on and the restaurant is Pro. */
+  loyaltyMode: LoyaltyMode;
 }
 
 export interface HostEntry {
@@ -152,7 +155,7 @@ export interface TicketSnapshot {
   order: Order | null;
   hasMenu: boolean;
   /** Present after the guest is seated. */
-  table: { open: boolean; label: string; orders: Order[]; bill: Bill | null } | null;
+  table: { open: boolean; label: string; orders: Order[]; bill: Bill | null; loyalty: LoyaltyPromo | null } | null;
 }
 
 export interface MenuCategory {
@@ -318,6 +321,10 @@ export interface Bill {
   requestedAt: number | null;
   paidAt: number | null;
   rating: { stars: number; comment: string } | null;
+  /** Last digits of the phone the guest gave for loyalty, e.g. "••6567". */
+  loyaltyPhone: string | null;
+  /** On a paid bill that earned: progress for the receipt. */
+  loyalty: LoyaltyReceipt | null;
 }
 
 /** What staff see on a table card. */
@@ -331,4 +338,75 @@ export interface BillSummary {
   method: PayMethod;
   receiptNo: number | null;
   stars: number | null;
+  loyaltyPhone: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Loyalty
+// ---------------------------------------------------------------------------
+
+export type LoyaltyMode = "off" | "stamps" | "points";
+
+export interface LoyaltySettings {
+  /** Effective mode ("off" while not Pro). */
+  mode: LoyaltyMode;
+  /** What the owner chose, kept while on Free so it comes back on upgrade. */
+  savedMode: LoyaltyMode;
+  stampsNeeded: number;
+  stampMinSpend: number;
+  spendPerPoint: number;
+}
+
+export interface LoyaltyReward {
+  id: string;
+  kind: "stamps" | "points";
+  nameEn: string;
+  nameAr: string;
+  nameUr: string;
+  cost: number;
+  active: boolean;
+}
+
+/** What a guest sees before paying: how the programme works. */
+export interface LoyaltyPromo {
+  mode: "stamps" | "points";
+  stampsNeeded: number;
+  stampMinSpend: number;
+  spendPerPoint: number;
+  rewards: Pick<LoyaltyReward, "nameEn" | "nameAr" | "nameUr" | "cost">[];
+}
+
+/** Shown on the paid receipt. */
+export interface LoyaltyReceipt {
+  mode: "stamps" | "points";
+  earnedStamps: number;
+  earnedPoints: number;
+  stamps: number;
+  points: number;
+  stampsNeeded: number;
+  /** Cheapest active reward still out of reach, or one they can already take. */
+  nextReward: (Pick<LoyaltyReward, "nameEn" | "nameAr" | "nameUr" | "cost"> & { ready: boolean }) | null;
+}
+
+/** Staff view of a member (Mark paid lookup). */
+export interface LoyaltyMemberView {
+  id: string;
+  name: string;
+  phoneMasked: string;
+  stamps: number;
+  points: number;
+  visits: number;
+  rewards: (LoyaltyReward & { affordable: boolean })[];
+}
+
+/** Owner list. */
+export interface LoyaltyMemberRow {
+  id: string;
+  name: string;
+  phone: string;
+  stamps: number;
+  points: number;
+  visits: number;
+  lastVisitAt: number | null;
+  createdAt: number;
 }

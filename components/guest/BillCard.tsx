@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Minus, Plus, Receipt, Star, Users, X } from "lucide-react";
+import { Check, Gift, Minus, Plus, Receipt, Star, Users, X } from "lucide-react";
 import { fmt, restaurantName, tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { money } from "@/lib/pricing";
-import { PAY_METHODS, TIP_CHOICES, type Bill, type BillLine, type Country, type Locale, type PayMethod, type PublicRestaurant } from "@/lib/types";
+import { PAY_METHODS, TIP_CHOICES, type Bill, type BillLine, type Country, type Locale, type LoyaltyPromo, type LoyaltyReceipt, type PayMethod, type PublicRestaurant } from "@/lib/types";
 
 const BRAND: Partial<Record<PayMethod, string>> = {
   mada: "mada",
@@ -39,6 +39,7 @@ export function BillCard({
   restaurant,
   endpoint,
   canRequest,
+  loyalty = null,
   onChange,
 }: {
   t: Dict;
@@ -48,6 +49,7 @@ export function BillCard({
   restaurant: PublicRestaurant;
   endpoint: string;
   canRequest: boolean;
+  loyalty?: LoyaltyPromo | null;
   onChange: () => void;
 }) {
   const [sheet, setSheet] = useState(false);
@@ -83,7 +85,7 @@ export function BillCard({
         )}
       </div>
       {requested && <p className="text-[11px] text-stone-600 mt-2">{t.billWaiterComing}</p>}
-      {sheet && <BillSheet t={t} locale={locale} bill={bill} currency={currency} country={restaurant.country} endpoint={endpoint} onClose={() => setSheet(false)} onSent={onChange} />}
+      {sheet && <BillSheet t={t} locale={locale} bill={bill} currency={currency} country={restaurant.country} endpoint={endpoint} loyalty={loyalty} onClose={() => setSheet(false)} onSent={onChange} />}
     </section>
   );
 }
@@ -95,6 +97,7 @@ export function BillSheet({
   currency,
   country,
   endpoint,
+  loyalty = null,
   onClose,
   onSent,
 }: {
@@ -104,9 +107,11 @@ export function BillSheet({
   currency: string;
   country: Country;
   endpoint: string;
+  loyalty?: LoyaltyPromo | null;
   onClose: () => void;
   onSent: () => void;
 }) {
+  const [phone, setPhone] = useState("");
   const methods = PAY_METHODS[country];
   const [split, setSplit] = useState(bill.splitWays);
   const [tip, setTip] = useState(bill.tipPct);
@@ -124,7 +129,7 @@ export function BillSheet({
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "request", tipPct: tip, split, method }),
+      body: JSON.stringify({ action: "request", tipPct: tip, split, method, ...(phone.trim() ? { phone: phone.trim() } : {}) }),
     }).catch(() => null);
     setBusy(false);
     if (res?.ok) {
@@ -203,6 +208,33 @@ export function BillSheet({
             </div>
             <p className="text-[11px] text-stone-500 mt-2">{t.billMethodNote}</p>
           </fieldset>
+
+          {loyalty && (
+            <fieldset className="p-3.5 rounded-2xl bg-white border border-line space-y-2">
+              <legend className="sr-only">{t.loyTitle}</legend>
+              <p className="flex items-start gap-2 text-sm font-extrabold">
+                <Gift className="w-4 h-4 text-ember shrink-0 mt-0.5" aria-hidden />
+                <span>{promoText(t, locale, loyalty, currency)}</span>
+              </p>
+              {bill.loyaltyPhone && !phone ? (
+                <p className="text-xs text-stone-600">
+                  {t.loyLinked} <bdi dir="ltr" className="font-bold">{bill.loyaltyPhone}</bdi>
+                </p>
+              ) : null}
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                dir="ltr"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+                placeholder={country === "SA" ? "05XXXXXXXX" : "03XXXXXXXXX"}
+                aria-label={t.loyPhone}
+                className="w-full rounded-xl border border-line bg-cream px-3 py-2.5 text-base text-start"
+              />
+              <p className="text-[11px] text-stone-500">{t.loyPrivacy}</p>
+            </fieldset>
+          )}
 
           <Totals t={t} subtotal={bill.subtotal} tipPct={tip} tipAmount={tipAmount} total={total} currency={currency} />
 
@@ -313,6 +345,7 @@ export function ReceiptCard({
           <p className="text-[10px] text-stone-500 text-center border-t border-dashed border-line pt-3">{t.receiptNotTax}</p>
         </div>
       </section>
+      {bill.loyalty && <LoyaltyProgress t={t} locale={locale} l={bill.loyalty} />}
       <Rating t={t} bill={bill} endpoint={endpoint} onChange={onChange} />
     </div>
   );
@@ -374,6 +407,52 @@ function Rating({ t, bill, endpoint, onChange }: { t: Dict; bill: Bill; endpoint
       {error && (
         <p role="alert" className="text-xs font-bold text-red-700 text-center">
           {t.errorGeneric}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function promoText(t: Dict, locale: Locale, l: LoyaltyPromo, currency: string) {
+  const top = l.rewards[0];
+  const reward = top ? tr(top, "name", locale) : t.loyAReward;
+  if (l.mode === "stamps") {
+    const base = fmt(t.loyPromoStamps, { n: l.stampsNeeded, reward });
+    return l.stampMinSpend > 0 ? `${base} ${fmt(t.loyMinSpend, { amount: money(l.stampMinSpend, currency) })}` : base;
+  }
+  return fmt(t.loyPromoPoints, { amount: money(l.spendPerPoint, currency), reward, cost: top?.cost ?? "" });
+}
+
+/** On the paid receipt: the stamp card or points, and the next reward. */
+function LoyaltyProgress({ t, locale, l }: { t: Dict; locale: Locale; l: LoyaltyReceipt }) {
+  const stamps = l.mode === "stamps";
+  const balance = stamps ? l.stamps : l.points;
+  const earned = stamps ? l.earnedStamps : l.earnedPoints;
+  const r = l.nextReward;
+  const filled = stamps ? Math.min(l.stamps, l.stampsNeeded) : 0;
+  return (
+    <section className="p-4 rounded-2xl bg-white border border-line space-y-3" aria-label={t.loyTitle}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-extrabold flex items-center gap-2">
+          <Gift className="w-4 h-4 text-ember" aria-hidden />
+          {earned > 0 ? fmt(stamps ? t.loyEarnedStamps : t.loyEarnedPoints, { n: earned }) : t.loyNoEarn}
+        </p>
+        <p className="text-sm font-extrabold">
+          <bdi>{fmt(stamps ? t.loyBalanceStamps : t.loyBalancePoints, { n: balance })}</bdi>
+        </p>
+      </div>
+      {stamps && (
+        <div className="flex flex-wrap gap-1.5" aria-label={`${filled}/${l.stampsNeeded}`}>
+          {Array.from({ length: l.stampsNeeded }, (_, i) => (
+            <span key={i} className={`w-7 h-7 rounded-full border-2 flex items-center justify-center ${i < filled ? "bg-ember border-ember text-white" : "border-line bg-cream"}`}>
+              {i < filled && <Check className="w-4 h-4" aria-hidden />}
+            </span>
+          ))}
+        </div>
+      )}
+      {r && (
+        <p className={`text-sm font-bold rounded-xl px-3 py-2 ${r.ready ? "bg-emerald-50 text-emerald-900" : "bg-cream text-stone-700"}`}>
+          {r.ready ? fmt(t.loyReady, { reward: tr(r, "name", locale) }) : fmt(stamps ? t.loyMoreStamps : t.loyMorePoints, { n: r.cost - balance, reward: tr(r, "name", locale) })}
         </p>
       )}
     </section>

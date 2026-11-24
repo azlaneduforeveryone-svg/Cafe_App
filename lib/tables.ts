@@ -5,7 +5,8 @@ import { broadcastChange } from "./realtime";
 import { allOrdersForEntries, cartOf, currencyOf, hasMenu, toOrder } from "./menu";
 import { getRestaurantById, toPublic } from "./queue";
 import { RECEIPT_HOURS, billFor, billSummaries, ratingSince } from "./bills";
-import type { Bill, BillSummary, Order, PublicRestaurant, Restaurant, Section } from "./types";
+import { loyaltyPromo } from "./loyalty";
+import type { Bill, BillSummary, LoyaltyMode, LoyaltyPromo, Order, PublicRestaurant, Restaurant, Section } from "./types";
 
 /**
  * Dining tables, table QR sessions and call-waiter alerts.
@@ -55,6 +56,7 @@ export interface FloorSnapshot {
   channel: string;
   currency: string;
   country: Restaurant["country"];
+  loyaltyMode: LoyaltyMode;
   sections: Section[];
   tables: FloorTable[];
   /** Waitlist parties that can be seated at a table. */
@@ -75,6 +77,8 @@ export interface TableGuestSnapshot {
   currency: string;
   /** The bill (preview, requested or paid). A paid one stays visible after the table closes, for the receipt and rating. */
   bill: Bill | null;
+  /** How loyalty works here (for the bill sheet), or null when off. */
+  loyalty: LoyaltyPromo | null;
 }
 
 interface TableRow {
@@ -280,6 +284,7 @@ export async function guestSnapshot(tableId: string, anySession: SessionRow | nu
     hasMenu: menuOn,
     currency: currencyOf(r),
     bill: s || bill?.status === "paid" ? bill : null,
+    loyalty: s ? await loyaltyPromo(r) : null,
   };
 }
 
@@ -398,6 +403,7 @@ export async function floorSnapshot(r: Restaurant): Promise<FloorSnapshot> {
     channel: r.id,
     currency: currencyOf(r),
     country: r.country,
+    loyaltyMode: r.loyalty.mode,
     sections: r.sections,
     tables: floor,
     waiting: ((waiting.data ?? []) as { id: string; ticket_number: number; name: string; party_size: number; status: string }[]).map((e) => ({

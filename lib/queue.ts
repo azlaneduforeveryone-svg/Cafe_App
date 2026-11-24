@@ -1,5 +1,6 @@
 import "server-only";
 import { billForEntry, billSummaries } from "./bills";
+import { loyaltyPromo } from "./loyalty";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
 import { isLocale } from "./i18n";
@@ -7,6 +8,7 @@ import { publicUrl } from "./media";
 import { allOrdersForEntries, cancelOpenOrder, currencyOf, hasMenu, orderForEntry, ordersForEntries, TABLE_HOURS, tableIsOpen } from "./menu";
 import type {
   Country,
+  LoyaltyMode,
   Entry,
   MealPeriod,
   Station,
@@ -52,6 +54,10 @@ interface RestaurantRow {
   logo_path: string | null;
   meal_periods?: MealPeriod[] | null;
   stations?: Station[] | null;
+  loyalty_mode?: LoyaltyMode | null;
+  stamps_needed?: number | null;
+  stamp_min_spend?: string | number | null;
+  spend_per_point?: string | number | null;
 }
 
 interface EntryRow {
@@ -105,6 +111,14 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     logoPath: row.logo_path ?? null,
     mealPeriods: Array.isArray(row.meal_periods) ? row.meal_periods : [],
     stations: Array.isArray(row.stations) ? row.stations : [],
+    loyalty: {
+      // Loyalty is a Pro feature; on Free it is shown as off everywhere (SQL enforces the same).
+      mode: isPro ? (row.loyalty_mode ?? "off") : "off",
+      savedMode: row.loyalty_mode ?? "off",
+      stampsNeeded: row.stamps_needed ?? 8,
+      stampMinSpend: Number(row.stamp_min_spend ?? 0),
+      spendPerPoint: Number(row.spend_per_point ?? 10),
+    },
   };
 }
 
@@ -204,6 +218,7 @@ export function toPublic(r: Restaurant): PublicRestaurant {
     sections: r.sections,
     gracePeriodMin: r.gracePeriodMin,
     logoUrl: publicUrl(r.logoPath),
+    loyaltyMode: r.loyalty.mode,
   };
 }
 
@@ -352,6 +367,7 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
             label: e.tableLabel,
             orders: ((await allOrdersForEntries([e.id], true)).get(e.id) ?? []).filter((o) => o.kind === "table"),
             bill: await billForEntry(e),
+            loyalty: tableIsOpen(e) ? await loyaltyPromo(r) : null,
           }
         : null,
   };

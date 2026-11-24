@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (b.action === "request") {
     const tr = await tableWithRestaurant(tableId);
     if (!tr) return fail("not_found", 404);
-    const res = await requestBill(src, tr.restaurant.country, b);
+    const res = await requestBill(src, tr.restaurant, b);
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   }
   if (b.action === "rate") {

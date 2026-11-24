@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Receipt, Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Gift, Receipt, Search, Star } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { methodLabel } from "@/components/guest/BillCard";
-import { fmt } from "@/lib/format";
+import { fmt, tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import { money } from "@/lib/pricing";
-import { PAY_METHODS, type BillSummary, type Country, type PayMethod } from "@/lib/types";
+import { PAY_METHODS, type BillSummary, type Country, type Locale, type LoyaltyMemberView, type LoyaltyMode, type PayMethod } from "@/lib/types";
+
+export interface PaidExtras {
+  phone?: string;
+  memberId?: string;
+  rewardId?: string;
+}
 
 /** Bill line on a staff table card: what the guest asked for, or the paid receipt. */
 export function BillStrip({ t, bill, currency }: { t: Dict; bill: BillSummary; currency: string }) {
@@ -57,6 +63,9 @@ export function MarkPaidModal({
   currency,
   bill,
   fallbackTotal,
+  locale,
+  loyaltyMode,
+  target,
   onConfirm,
   onClose,
 }: {
@@ -66,12 +75,52 @@ export function MarkPaidModal({
   currency: string;
   bill: BillSummary | null;
   fallbackTotal: number;
-  onConfirm: (method: PayMethod) => Promise<boolean>;
+  locale: Locale;
+  loyaltyMode: LoyaltyMode;
+  /** Whose bill: used to find the loyalty number the guest gave. */
+  target: { sessionId?: string; entryId?: string };
+  onConfirm: (method: PayMethod, extras: PaidExtras) => Promise<boolean>;
   onClose: () => void;
 }) {
   const methods = PAY_METHODS[country];
   const [method, setMethod] = useState<PayMethod>(bill && methods.includes(bill.method) ? bill.method : "cash");
   const [busy, setBusy] = useState(false);
+  const loyaltyOn = loyaltyMode !== "off";
+  const [phone, setPhone] = useState("");
+  const [guestPhone, setGuestPhone] = useState<string | null>(null);
+  const [member, setMember] = useState<LoyaltyMemberView | null>(null);
+  const [looked, setLooked] = useState(false);
+  const [lookupErr, setLookupErr] = useState(false);
+  const [rewardId, setRewardId] = useState<string>("");
+
+  async function lookup(params: Record<string, string>) {
+    setLookupErr(false);
+    const res = await fetch(`/api/host/loyalty?${new URLSearchParams(params)}`).catch(() => null);
+    if (!res?.ok) {
+      setLookupErr(true);
+      return;
+    }
+    const out = (await res.json()) as { member: LoyaltyMemberView | null; phoneMasked: string | null };
+    setMember(out.member);
+    setRewardId("");
+    setLooked(true);
+    return out;
+  }
+
+  // On open, look up the number the guest put on the bill (staff never see it in full).
+  useEffect(() => {
+    if (!loyaltyOn) return;
+    const p: Record<string, string> = target.sessionId ? { sessionId: target.sessionId } : target.entryId ? { entryId: target.entryId } : {};
+    if (!Object.keys(p).length) return;
+    void (async () => {
+      const res = await fetch(`/api/host/loyalty?${new URLSearchParams(p)}`).catch(() => null);
+      if (!res?.ok) return;
+      const out = (await res.json()) as { member: LoyaltyMemberView | null; phoneMasked: string | null };
+      setGuestPhone(out.phoneMasked);
+      setMember(out.member);
+      setLooked(!!out.phoneMasked);
+    })();
+  }, [loyaltyOn, target.sessionId, target.entryId]);
   const total = bill?.total ?? fallbackTotal;
   return (
     <Modal title={title} onClose={onClose} closeLabel={t.close}>
@@ -98,12 +147,65 @@ export function MarkPaidModal({
             ))}
           </div>
         </fieldset>
+        {loyaltyOn && (
+          <fieldset className="p-3 rounded-2xl bg-cream border border-line space-y-2">
+            <legend className="text-xs font-extrabold text-stone-500 px-1 flex items-center gap-1">
+              <Gift className="w-3.5 h-3.5 text-ember" aria-hidden />
+              {t.loyTitle}
+            </legend>
+            {guestPhone && !phone && (
+              <p className="text-xs text-stone-700">
+                {t.loyGuestGave} <bdi dir="ltr" className="font-bold">{guestPhone}</bdi>
+              </p>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="tel"
+                inputMode="tel"
+                dir="ltr"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+                placeholder={guestPhone ? t.loyOtherNumber : t.loyPhone}
+                aria-label={t.loyPhone}
+                className="flex-1 min-w-0 rounded-xl border border-line bg-white px-3 py-2 text-sm text-start"
+              />
+              <button type="button" disabled={!phone.trim()} onClick={() => void lookup({ phone })} aria-label={t.loyLookup} className="px-3 rounded-xl bg-ink text-white disabled:opacity-40">
+                <Search className="w-4 h-4" aria-hidden />
+              </button>
+            </div>
+            {lookupErr && <p role="alert" className="text-xs font-bold text-red-700">{t.loyBadPhone}</p>}
+            {looked && !member && !lookupErr && <p className="text-xs text-stone-600">{t.loyNewMember}</p>}
+            {member && (
+              <div className="space-y-2">
+                <p className="text-sm">
+                  <b>{member.name || t.loyNoName}</b> <bdi dir="ltr" className="text-stone-500">{member.phoneMasked}</bdi>
+                  {" · "}
+                  <bdi>{fmt(loyaltyMode === "stamps" ? t.loyBalanceStamps : t.loyBalancePoints, { n: loyaltyMode === "stamps" ? member.stamps : member.points })}</bdi>
+                  {" · "}
+                  {fmt(t.loyVisits, { n: member.visits })}
+                </p>
+                {member.rewards.some((w) => w.affordable) && (
+                  <div className="space-y-1" role="radiogroup" aria-label={t.loyRedeem}>
+                    <p className="text-[11px] font-extrabold text-stone-500">{t.loyRedeem}</p>
+                    {[{ id: "", label: t.loyRedeemNone }, ...member.rewards.filter((w) => w.affordable).map((w) => ({ id: w.id, label: `${tr(w, "name", locale)} (${w.cost})` }))].map((o) => (
+                      <label key={o.id || "none"} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-sm cursor-pointer ${rewardId === o.id ? "bg-white border-ink font-bold" : "border-line"}`}>
+                        <input type="radio" name="reward" checked={rewardId === o.id} onChange={() => setRewardId(o.id)} />
+                        {o.label}
+                      </label>
+                    ))}
+                    {rewardId && <p className="text-[11px] text-amber-800 font-bold">{t.loyCheckName}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+          </fieldset>
+        )}
         <button
           type="button"
           disabled={busy}
           onClick={async () => {
             setBusy(true);
-            const ok = await onConfirm(method);
+            const ok = await onConfirm(method, { ...(phone.trim() ? { phone: phone.trim() } : {}), ...(member ? { memberId: member.id } : {}), ...(rewardId ? { rewardId } : {}) });
             setBusy(false);
             if (ok) onClose();
           }}

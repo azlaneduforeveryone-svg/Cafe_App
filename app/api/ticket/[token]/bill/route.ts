@@ -14,7 +14,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (b.action === "request") {
     const r = await getRestaurantById(e.restaurantId);
     if (!r) return fail("not_found", 404);
-    const res = await requestBill(src, r.country, b);
+    const res = await requestBill(src, r, b);
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   }
   if (b.action === "rate") {

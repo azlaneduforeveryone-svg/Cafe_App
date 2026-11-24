@@ -80,7 +80,7 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
           </p>
         )}
 
-        {bill && <BillCard t={t} locale={locale} bill={bill} currency={data.currency} restaurant={data.restaurant} endpoint={billEndpoint} canRequest={!paid} onChange={() => void refresh()} />}
+        {bill && <BillCard t={t} locale={locale} bill={bill} currency={data.currency} restaurant={data.restaurant} endpoint={billEndpoint} canRequest={!paid} loyalty={data.loyalty} onChange={() => void refresh()} />}
 
         {data.hasMenu && !paid && (
           <button
@@ -178,7 +178,7 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
       </div>
 
       {billSheet && bill && (
-        <BillSheet t={t} locale={locale} bill={bill} currency={data.currency} country={data.restaurant.country} endpoint={billEndpoint} onClose={() => setBillSheet(false)} onSent={() => void refresh()} />
+        <BillSheet t={t} locale={locale} bill={bill} currency={data.currency} country={data.restaurant.country} endpoint={billEndpoint} loyalty={data.loyalty} onClose={() => setBillSheet(false)} onSent={() => void refresh()} />
       )}
 
       {showMenu && (

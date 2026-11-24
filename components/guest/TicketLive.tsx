@@ -288,6 +288,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
             restaurant={data.restaurant}
             endpoint={`/api/ticket/${token}/bill`}
             canRequest={tableOpen && data.table.bill.status !== "paid"}
+            loyalty={data.table.loyalty}
             onChange={() => void refresh()}
           />
         </div>
