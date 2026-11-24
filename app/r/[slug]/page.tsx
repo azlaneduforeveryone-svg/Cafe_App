@@ -3,6 +3,7 @@ import { LocaleRoot } from "@/components/LocaleRoot";
 import { GuestFrame } from "@/components/guest/GuestFrame";
 import { DemoLinks } from "@/components/guest/DemoLinks";
 import { JoinForm } from "@/components/guest/JoinForm";
+import { RestaurantContact } from "@/components/guest/RestaurantContact";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demo";
 import { demoLinks } from "@/lib/demoLinks";
 import { dict } from "@/lib/i18n";
@@ -23,6 +24,7 @@ export default async function JoinPage({ params }: { params: Promise<{ slug: str
       <GuestFrame t={t} locale={locale} restaurant={restaurant} nowServing={r.nowServing}>
         {demo && <DemoLinks t={t} table={demo.table} email={DEMO_EMAIL} password={DEMO_PASSWORD} />}
         <JoinForm t={t} locale={locale} restaurant={restaurant} eta={eta} waiting={waiting} />
+        <RestaurantContact t={t} contact={r.contact} />
       </GuestFrame>
     </LocaleRoot>
   );

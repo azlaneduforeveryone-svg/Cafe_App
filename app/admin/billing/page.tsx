@@ -28,9 +28,14 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-extrabold">Billing admin</h1>
-          <Link href="/dashboard" className="text-ember font-bold hover:underline">
-            Back to the app
-          </Link>
+          <nav className="flex gap-4 font-bold">
+            <Link href="/admin/clients" className="text-ember hover:underline">
+              Clients
+            </Link>
+            <Link href="/dashboard" className="text-ember hover:underline">
+              Back to the app
+            </Link>
+          </nav>
         </div>
         {msg && <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">{msg}</p>}
 

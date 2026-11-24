@@ -40,6 +40,10 @@ export interface Restaurant {
   triviaOn: boolean;
   /** Waiters see every table, or only the ones assigned to them. */
   waiterScope: "all" | "assigned";
+  /** Shown on the guest join page when set. */
+  contact: { phone: string; address: string; city: string };
+  /** Private business record (admin and owner only). */
+  business: { legalName: string; crNumber: string; vatNumber: string };
 }
 
 export interface Staff {

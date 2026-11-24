@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bell, Clock, Globe, QrCode, Smartphone, Sparkles, Timer, Users } from "lucide-react";
 import { Brand } from "@/components/Brand";
+import { BrandIntro } from "@/components/BrandIntro";
 import { LangSwitch } from "@/components/LangSwitch";
 import { LocaleRoot } from "@/components/LocaleRoot";
 import { getStaff } from "@/lib/auth";
@@ -50,6 +51,7 @@ export default async function Landing() {
           </div>
         </div>
       </header>
+      <BrandIntro label={t.brand} />
 
       <main className="flex-1">
         <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 grid lg:grid-cols-12 gap-10 items-center">

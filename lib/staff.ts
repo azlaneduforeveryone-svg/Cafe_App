@@ -23,7 +23,7 @@ const INVITE_HOURS = 48;
 /** Mobile logins use this address internally (the .invalid domain is reserved and never delivers mail). */
 export const PHONE_DOMAIN = "phone.tablepulse.invalid";
 export const phoneLoginEmail = (digits: string) => `p${digits}@${PHONE_DOMAIN}`;
-const hash = (token: string) => createHash("sha256").update(token).digest("hex");
+export const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** Digits with country code for a Saudi or Pakistani mobile (or any +number), else null. */
 export async function normaliseAnyPhone(raw: string): Promise<string | null> {
@@ -146,7 +146,7 @@ export async function createInvite(ctx: StaffContext, b: Record<string, unknown>
   return { ok: true, value: { link, share, contactType } };
 }
 
-async function authUserExists(email: string): Promise<boolean> {
+export async function authUserExists(email: string): Promise<boolean> {
   // Small restaurants: listing a page of users is fine; the staff table is the real guard (one login, one restaurant).
   const { data } = await adminClient().auth.admin.listUsers({ page: 1, perPage: 1000 });
   return (data?.users ?? []).some((u) => u.email?.toLowerCase() === email);
@@ -242,7 +242,7 @@ export async function acceptInvite(token: string, password: unknown): Promise<Re
   const { error: claimErr } = await admin.rpc("tp_accept_invite", { p_token_hash: hash(token), p_user_id: created.user.id, p_phone: i.contact_type === "phone" ? i.contact : "" }).single();
   if (claimErr) {
     await admin.auth.admin.deleteUser(created.user.id); // nothing left behind
-    const code = ["invite_invalid", "seats_full", "already_staff"].find((c) => claimErr.message.includes(c)) ?? "server_error";
+    const code = ["invite_invalid", "seats_full", "already_staff", "owner_exists"].find((c) => claimErr.message.includes(c)) ?? "server_error";
     return fail(code, 409);
   }
   const supabase = await createClient();

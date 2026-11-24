@@ -436,3 +436,13 @@ A trivia game now belongs to a table session or a waiting party (never both). Th
 - [ ] Staff press Notify for that party while a question is open: the trivia sheet closes and the "table ready" screen shows.
 - [ ] After seating at a table, the guest lands on the table page; its trivia starts fresh (table players).
 - [ ] A finished waiting-party game does not appear in "Top tables today".
+
+## Phase 7: client onboarding (0014)
+
+1. SQL Editor: run `supabase/migrations/0014_client_onboarding.sql` (safe to run twice).
+2. Open `/admin/clients` while logged in with an email listed in `ADMIN_EMAILS`.
+3. Fill in the restaurant, the client's logo, business record and the owner's mobile or email. Press Create.
+4. Send the owner the link shown (WhatsApp or email button). It works once, for 7 days, and is shown only then. Lost it: press "New owner link" (the old one stops working).
+5. The owner opens the link, sets a password and lands on their dashboard as Owner. Their 14-day trial starts that day.
+6. Check: the owner's email or mobile must not already have a TablePulse login (one login, one restaurant).
+7. Restaurant phone and address appear on the guest join page. Legal name, CR and VAT stay private.

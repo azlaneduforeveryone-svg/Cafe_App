@@ -61,6 +61,12 @@ interface RestaurantRow {
   spend_per_point?: string | number | null;
   trivia_on?: boolean | null;
   waiter_scope?: "all" | "assigned" | null;
+  legal_name?: string | null;
+  cr_number?: string | null;
+  vat_number?: string | null;
+  business_phone?: string | null;
+  address?: string | null;
+  city?: string | null;
 }
 
 interface EntryRow {
@@ -124,6 +130,8 @@ export function toRestaurant(row: RestaurantRow): Restaurant {
     },
     triviaOn: row.trivia_on ?? true,
     waiterScope: row.waiter_scope === "assigned" ? "assigned" : "all",
+    contact: { phone: row.business_phone ?? "", address: row.address ?? "", city: row.city ?? "" },
+    business: { legalName: row.legal_name ?? "", crNumber: row.cr_number ?? "", vatNumber: row.vat_number ?? "" },
   };
 }
 
