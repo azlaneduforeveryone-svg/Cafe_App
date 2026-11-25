@@ -446,3 +446,9 @@ A trivia game now belongs to a table session or a waiting party (never both). Th
 5. The owner opens the link, sets a password and lands on their dashboard as Owner. Their 14-day trial starts that day.
 6. Check: the owner's email or mobile must not already have a TablePulse login (one login, one restaurant).
 7. Restaurant phone and address appear on the guest join page. Legal name, CR and VAT stay private.
+
+## Phase 7b: owner-only legal details (no SQL)
+
+- Settings > "Contact for guests" (phone, city, address): owner and manager can edit. Shown on the guest join page.
+- Settings > "Legal details" (legal name, CR, VAT): only the owner sees and edits. A manager's page never receives these values; the API refuses them with 403.
+- Activity log records which field changed (for example "CR, VAT"), not the values.

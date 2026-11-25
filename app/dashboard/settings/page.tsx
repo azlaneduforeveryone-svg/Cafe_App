@@ -1,7 +1,9 @@
 import QRCode from "qrcode";
 import { HostTopBar } from "@/components/HostTopBar";
 import { LocaleRoot } from "@/components/LocaleRoot";
+import { BusinessCard } from "@/components/host/BusinessCard";
 import { LogoCard } from "@/components/host/LogoCard";
+import { can } from "@/lib/permissions";
 import { PrintButton } from "@/components/host/PrintButton";
 import { publicUrl } from "@/lib/media";
 import { SettingsForm } from "@/components/host/SettingsForm";
@@ -11,7 +13,7 @@ import { dict } from "@/lib/i18n";
 import { hostLocale, siteOrigin } from "@/lib/locale";
 
 export default async function SettingsPage() {
-  const { restaurant: r } = await requireStaff("settings.manage");
+  const { restaurant: r, staff } = await requireStaff("settings.manage");
   const locale = await hostLocale();
   const t = dict(locale);
   const origin = await siteOrigin();
@@ -39,6 +41,10 @@ export default async function SettingsPage() {
               minutesPerParty: r.minutesPerParty,
             }}
           />
+          <div className="mt-5">
+            {/* Legal details are only passed to the page for the owner, so a manager's browser never receives them. */}
+            <BusinessCard t={t} contact={r.contact} legal={can(staff.role, "business.legal") ? r.business : null} />
+          </div>
         </div>
 
         {/* Printable QR card: only this prints */}

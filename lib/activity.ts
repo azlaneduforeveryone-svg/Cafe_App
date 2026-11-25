@@ -22,7 +22,9 @@ export type ActivityAction =
   | "staff_removed"
   | "staff_role_changed"
   | "invite_revoked"
-  | "settings_changed";
+  | "settings_changed"
+  | "contact_changed"
+  | "legal_changed";
 
 export async function logActivity(ctx: StaffContext, action: ActivityAction, target = "", detail: Record<string, unknown> = {}) {
   try {

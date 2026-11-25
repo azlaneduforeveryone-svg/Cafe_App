@@ -23,7 +23,8 @@ export type Permission =
   | "menu.stock" // sold out / back in stock
   | "menu.edit" // dishes, prices, schedules, stations
   | "tables.manage" // add tables, QR codes, Wi-Fi
-  | "settings.manage" // restaurant settings, logo
+  | "settings.manage" // restaurant settings, logo, guest-facing phone and address
+  | "business.legal" // legal name, CR and VAT numbers (owner only)
   | "loyalty.manage" // loyalty settings, rewards
   | "loyalty.members" // member list with phone numbers
   | "trivia.manage"
@@ -34,13 +35,13 @@ export type Permission =
 
 const ALL: Permission[] = [
   "queue.view", "queue.manage", "floor.view", "floor.tables", "floor.alerts", "orders.pre", "orders.table", "orders.serve",
-  "bills.pay", "kitchen.view", "kitchen.act", "kitchen.device", "menu.stock", "menu.edit", "tables.manage", "settings.manage",
+  "bills.pay", "kitchen.view", "kitchen.act", "kitchen.device", "menu.stock", "menu.edit", "tables.manage", "settings.manage", "business.legal",
   "loyalty.manage", "loyalty.members", "trivia.manage", "reports.view", "activity.view", "staff.manage", "billing.manage",
 ];
 
 const GRANTS: Record<Role, ReadonlySet<Permission>> = {
   owner: new Set(ALL),
-  manager: new Set(ALL.filter((p) => p !== "billing.manage")),
+  manager: new Set(ALL.filter((p) => p !== "billing.manage" && p !== "business.legal")),
   reception: new Set<Permission>(["queue.view", "queue.manage", "floor.view", "floor.tables", "floor.alerts", "orders.pre", "bills.pay"]),
   waiter: new Set<Permission>(["queue.view", "floor.view", "floor.tables", "floor.alerts", "orders.pre", "orders.table", "orders.serve", "kitchen.view"]),
 };
