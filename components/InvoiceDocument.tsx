@@ -12,7 +12,7 @@ export function InvoiceDocument({ inv }: { inv: Invoice }) {
     <article dir="ltr" lang="en" className="bg-white rounded-2xl border border-line p-6 sm:p-10 print:border-0 print:rounded-none print:p-0 text-sm text-ink">
       <header className="flex flex-wrap justify-between gap-6 border-b border-line pb-6">
         <div>
-          <p className="text-2xl font-extrabold">{s.name || "TablePulse"}</p>
+          <p className="text-2xl font-extrabold">{s.name || "Table & Bell"}</p>
           {s.address && <p className="text-stone-600 whitespace-pre-line mt-1">{s.address}</p>}
           {s.taxId && <p className="text-stone-600 mt-1">Tax registration no.: {s.taxId}</p>}
           {s.email && <p className="text-stone-600">{s.email}</p>}
@@ -82,7 +82,7 @@ export function InvoiceDocument({ inv }: { inv: Invoice }) {
       </div>
 
       {inv.note && <p className="mt-6 text-stone-600">Note: {inv.note}</p>}
-      <p className="mt-10 text-[11px] text-stone-500">Thank you for using TablePulse. This invoice was generated electronically.</p>
+      <p className="mt-10 text-[11px] text-stone-500">Thank you for using Table & Bell. This invoice was generated electronically.</p>
     </article>
   );
 }

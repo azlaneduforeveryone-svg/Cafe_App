@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "TablePulse",
-    short_name: "TablePulse",
+    name: "Table & Bell",
+    short_name: "Table & Bell",
     description: "QR waitlist and digital buzzer for restaurants.",
     start_url: "/dashboard",
     display: "standalone",

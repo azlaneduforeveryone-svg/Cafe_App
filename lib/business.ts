@@ -1,5 +1,6 @@
 import "server-only";
 import { logActivity } from "./activity";
+import { isDemoRestaurant } from "./demo";
 import type { StaffContext } from "./auth";
 import { broadcastChange } from "./realtime";
 import { normaliseAnyPhone } from "./staff";
@@ -17,6 +18,7 @@ const CODE = /^[A-Za-z0-9-]{0,30}$/;
 const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
 export async function updateContact(ctx: StaffContext, b: Record<string, unknown>): Promise<Result> {
+  if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);
   const address = clean(b.address, 200);
   const city = clean(b.city, 60);
   const raw = clean(b.phone, 40);
@@ -36,6 +38,7 @@ export async function updateContact(ctx: StaffContext, b: Record<string, unknown
 
 export async function updateLegal(ctx: StaffContext, b: Record<string, unknown>): Promise<Result> {
   if (ctx.staff.role !== "owner") return fail("forbidden", 403); // second lock behind the permission check
+  if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);
   const legalName = clean(b.legalName, 120);
   const crNumber = clean(b.crNumber, 30);
   const vatNumber = clean(b.vatNumber, 30);

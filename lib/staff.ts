@@ -1,4 +1,5 @@
 import "server-only";
+import { isDemoRestaurant } from "./demo";
 import { createHash, randomBytes } from "node:crypto";
 import { logActivity } from "./activity";
 import type { StaffContext } from "./auth";
@@ -98,6 +99,7 @@ const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\
 
 /** Create a one-time invite. The link (with the token) is returned once and never stored. */
 export async function createInvite(ctx: StaffContext, b: Record<string, unknown>): Promise<Result<{ link: string; share: string; contactType: "email" | "phone" }>> {
+  if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);
   const name = clean(b.name, 60);
   const role = b.role as Role;
   const rawContact = clean(b.contact, 120);
@@ -141,8 +143,8 @@ export async function createInvite(ctx: StaffContext, b: Record<string, unknown>
   await logActivity(ctx, "staff_invited", name, { role, contact: contactType === "phone" ? `+${contact}` : contact });
 
   const link = `${await siteOrigin()}/invite/${token}`;
-  const text = `${ctx.restaurant.name}: ${name}, join our TablePulse team (${role}). Open this link within 48 hours to set your password: ${link}`;
-  const share = contactType === "phone" ? `https://wa.me/${contact}?text=${encodeURIComponent(text)}` : `mailto:${contact}?subject=${encodeURIComponent(`${ctx.restaurant.name} – TablePulse`)}&body=${encodeURIComponent(text)}`;
+  const text = `${ctx.restaurant.name}: ${name}, join our Table & Bell team (${role}). Open this link within 48 hours to set your password: ${link}`;
+  const share = contactType === "phone" ? `https://wa.me/${contact}?text=${encodeURIComponent(text)}` : `mailto:${contact}?subject=${encodeURIComponent(`${ctx.restaurant.name} on Table & Bell`)}&body=${encodeURIComponent(text)}`;
   return { ok: true, value: { link, share, contactType } };
 }
 
@@ -169,6 +171,7 @@ async function memberOf(ctx: StaffContext, userId: string) {
 }
 
 export async function changeRole(ctx: StaffContext, userId: string, role: unknown): Promise<Result> {
+  if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);
   const m = await memberOf(ctx, userId);
   if (!m) return fail("not_found", 404);
   if (!INVITABLE.includes(role as Role) || m.user_id === ctx.staff.userId) return fail("invalid", 400);
@@ -180,6 +183,7 @@ export async function changeRole(ctx: StaffContext, userId: string, role: unknow
 
 /** Remove a staff member: their login is deleted, so it stops working at once. */
 export async function removeStaff(ctx: StaffContext, userId: string): Promise<Result> {
+  if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);
   const m = await memberOf(ctx, userId);
   if (!m) return fail("not_found", 404);
   if (m.user_id === ctx.staff.userId) return fail("invalid", 400);

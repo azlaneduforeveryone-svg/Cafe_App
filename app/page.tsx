@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Clock, Globe, QrCode, Smartphone, Sparkles, Timer, Users } from "lucide-react";
+import { Bell, Clock, Globe, Mail, MessageCircle, QrCode, Smartphone, Sparkles, Timer, Users } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { BrandIntro } from "@/components/BrandIntro";
 import { LangSwitch } from "@/components/LangSwitch";
@@ -9,13 +9,16 @@ import { fmt } from "@/lib/format";
 import { dict } from "@/lib/i18n";
 import { HOST_COOKIE, hostLocale } from "@/lib/locale";
 import { FREE_LIMIT, getRestaurantBySlug } from "@/lib/queue";
-import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SLUG, showDemoLogin } from "@/lib/demo";
+import { salesContact } from "@/lib/contact";
+import { DEMO_SLUG } from "@/lib/demo";
 
 export default async function Landing() {
   const locale = await hostLocale();
   const t = dict(locale);
   const staff = await getStaff();
   const hasDemo = (await getRestaurantBySlug(DEMO_SLUG).catch(() => null)) !== null;
+  const contact = salesContact();
+  const waDemo = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(fmt(t.demoWaMsg, { brand: t.brand }))}` : null;
 
   const steps = [
     { Icon: QrCode, title: t.how1Title, body: t.how1Body },
@@ -69,6 +72,17 @@ export default async function Landing() {
               >
                 {t.ctaStart}
               </Link>
+              {waDemo && (
+                <a
+                  href={waDemo}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-[#128c4b] hover:bg-[#0f7a41] text-white font-extrabold text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" aria-hidden />
+                  {t.ctaBookDemo}
+                </a>
+              )}
               {hasDemo && (
                 <Link
                   href={`/r/${DEMO_SLUG}`}
@@ -78,11 +92,7 @@ export default async function Landing() {
                 </Link>
               )}
             </div>
-            {hasDemo && showDemoLogin() && (
-              <p className="text-xs text-stone-500">
-                {fmt(t.demoNote, { email: DEMO_EMAIL, password: DEMO_PASSWORD })}
-              </p>
-            )}
+            {(contact.whatsapp || contact.email) && <p className="text-xs text-stone-500">{t.demoContactNote}</p>}
           </div>
 
           {/* Static phone preview in the demo's style */}
@@ -146,7 +156,26 @@ export default async function Landing() {
         </section>
       </main>
 
-      <footer className="border-t border-line py-6 text-center text-xs text-stone-500">{t.footer}</footer>
+      <footer className="border-t border-line py-6 text-center text-xs text-stone-500 space-y-2">
+        {(contact.whatsapp || contact.email) && (
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm">
+            <span className="font-bold text-ink">{t.contactUs}</span>
+            {contact.whatsapp && (
+              <a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-ember">
+                <MessageCircle className="w-4 h-4" aria-hidden />
+                <bdi dir="ltr">+{contact.whatsapp}</bdi>
+              </a>
+            )}
+            {contact.email && (
+              <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-ember">
+                <Mail className="w-4 h-4" aria-hidden />
+                <bdi dir="ltr">{contact.email}</bdi>
+              </a>
+            )}
+          </div>
+        )}
+        <p>{t.footer}</p>
+      </footer>
     </LocaleRoot>
   );
 }

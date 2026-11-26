@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 /**
- * TablePulse platform mark. Files live in public/brand, so a better logo can be
+ * Table & Bell platform mark. Files live in public/brand, so a better logo can be
  * swapped in later by replacing mascot.png (square, transparent) with no code change.
  */
 export function Brand({ name, href = "/", dark = true }: { name: string; href?: string; dark?: boolean }) {

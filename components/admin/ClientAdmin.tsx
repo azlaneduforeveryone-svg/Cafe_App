@@ -14,7 +14,7 @@ const ERRORS: Record<string, string> = {
   country: "Pick Saudi Arabia or Pakistan.",
   bad_code: "CR and VAT numbers can only use letters, digits and dashes (30 max).",
   bad_contact: "Owner contact must be a valid email or a Saudi/Pakistani mobile.",
-  account_exists: "That email or mobile already has a TablePulse login. One login can belong to one restaurant only.",
+  account_exists: "That email or mobile already has a Table & Bell login. One login can belong to one restaurant only.",
   bad_phone: "Restaurant phone is not a valid Saudi or Pakistani number.",
   image_type: "Logo must be a PNG, JPG or WebP image.",
   owner_exists: "This restaurant already has an owner.",

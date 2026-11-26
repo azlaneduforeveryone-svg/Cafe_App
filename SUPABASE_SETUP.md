@@ -1,6 +1,6 @@
 # Supabase migration: steps to finish
 
-This branch moves TablePulse from a local JSON file to Supabase:
+This branch moves Table & Bell from a local JSON file to Supabase:
 
 - **Database:** Postgres tables `restaurants`, `staff`, `entries` (`supabase/migrations/0001_tablepulse.sql`)
 - **Login:** Supabase Auth with `@supabase/ssr` (email + password, email confirmation, password reset)
@@ -37,9 +37,9 @@ It's safe to run again. Check: **Table Editor** shows `restaurants`, `staff`, `e
 
 Dashboard > **Authentication** > **URL Configuration**:
 
-- **Site URL:** `https://cafeapp-pi.vercel.app`
+- **Site URL:** `https://tableandbell.com`
 - **Redirect URLs** (add both):
-  - `https://cafeapp-pi.vercel.app/**`
+  - `https://tableandbell.com/**`
   - `http://localhost:3000/**`
 
 Dashboard > **Authentication** > **Email Templates** (recommended, so links work when opened on a different device than the one used to sign up):
@@ -83,7 +83,7 @@ npm install
 npm run dev
 ```
 
-Optional demo restaurant (creates the login `demo@tablepulse.app` / `demo1234` and three waiting guests; run again any time to reset it):
+Optional demo restaurant (creates the login `demo@tableandbell.com` with the password in `DEMO_PASSWORD` and three waiting guests; run again any time to reset it):
 
 ```
 node --env-file=.env.local scripts/seed-demo.mjs
@@ -107,7 +107,7 @@ If the host screen only updates every 20 seconds instead of instantly, Realtime 
 
 ## 7. Deploy
 
-Commit and push to `main`. Vercel builds automatically. Repeat the checklist on `https://cafeapp-pi.vercel.app`.
+Commit and push to `main`. Vercel builds automatically. Repeat the checklist on `https://tableandbell.com`.
 
 ---
 
@@ -273,7 +273,7 @@ What it adds:
 - `tp_mark_paid`: staff confirm payment (works without a guest request). Gives the next receipt number, freezes the lines, cancels rounds still waiting for approval, resolves the bill call. Tapping twice changes nothing.
 - Trigger `orders_block_after_paid`: once paid, no new round, no edit to a waiting round and no late approval can be added to that bill.
 
-TablePulse records how the guest pays; it does not take payment. Receipts say "Not a tax invoice".
+Table & Bell records how the guest pays; it does not take payment. Receipts say "Not a tax invoice".
 
 ### Checklist
 - [ ] Migration ran with no error; `select count(*) from bills;` returns 0.
@@ -407,7 +407,7 @@ Invites by mobile need no SMS: the manager gets the link and a WhatsApp button. 
 - `staff_notifications`: when a station marks food ready, the table's assigned waiter is told (no waiter assigned: every waiter; no waiters: managers and owner). Waitlist pre-orders go to reception. When a dish goes out of stock, the waiters of tables that ordered it and haven't been served are told. Alerts show at the top of Floor and the waitlist screen with a chime; "Got it" clears them.
 - Kitchen display actions are in the Activity log under the screen's name (role: Kitchen display).
 
-Limitation: alerts appear on the waiter's screen while the TablePulse page is open on their phone. A locked phone gets no push notification yet (that needs web push, a separate step).
+Limitation: alerts appear on the waiter's screen while the Table & Bell page is open on their phone. A locked phone gets no push notification yet (that needs web push, a separate step).
 
 ### Checklist
 - [ ] Migration ran with no error.
@@ -444,7 +444,7 @@ A trivia game now belongs to a table session or a waiting party (never both). Th
 3. Fill in the restaurant, the client's logo, business record and the owner's mobile or email. Press Create.
 4. Send the owner the link shown (WhatsApp or email button). It works once, for 7 days, and is shown only then. Lost it: press "New owner link" (the old one stops working).
 5. The owner opens the link, sets a password and lands on their dashboard as Owner. Their 14-day trial starts that day.
-6. Check: the owner's email or mobile must not already have a TablePulse login (one login, one restaurant).
+6. Check: the owner's email or mobile must not already have a Table & Bell login (one login, one restaurant).
 7. Restaurant phone and address appear on the guest join page. Legal name, CR and VAT stay private.
 
 ## Phase 7b: owner-only legal details (no SQL)
@@ -452,3 +452,10 @@ A trivia game now belongs to a table session or a waiting party (never both). Th
 - Settings > "Contact for guests" (phone, city, address): owner and manager can edit. Shown on the guest join page.
 - Settings > "Legal details" (legal name, CR, VAT): only the owner sees and edits. A manager's page never receives these values; the API refuses them with 403.
 - Activity log records which field changed (for example "CR, VAT"), not the values.
+
+## Phase 7c: private demo login and contact details (no SQL)
+
+- The demo password is no longer in the code. Put `DEMO_PASSWORD=<your choice, 10+ characters>` in `.env.local` only (not Vercel), then run `node --env-file=.env.local scripts/seed-demo.mjs`. The demo login becomes `demo@tableandbell.com` (the old demo@tablepulse.app account is moved to it). Re-run the seed any time to reset the demo and its password.
+- Vercel: delete `SHOW_DEMO_LOGIN`. Add `CONTACT_WHATSAPP` (digits only, e.g. 9665XXXXXXXX) and `CONTACT_EMAIL` for Production. Redeploy.
+- Landing page: "Book a demo" WhatsApp button and a contact line in the footer. No demo credentials anywhere.
+- On the demo restaurant these are refused: staff invites, role changes, removing staff, photo and logo uploads, guest contact and legal details, billing, password reset.

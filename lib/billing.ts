@@ -25,7 +25,7 @@ type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string
 const fail = (error: string, status: number) => ({ ok: false as const, error, status });
 
 export const GRACE_DAYS = 3;
-export const PLAN_DESCRIPTION = "TablePulse Pro, monthly";
+export const PLAN_DESCRIPTION = "Table & Bell Pro, monthly";
 
 export function billingConfig() {
   const rate = Number(process.env.BILLING_TAX_RATE ?? 0);
@@ -33,7 +33,7 @@ export function billingConfig() {
     taxRate: Number.isFinite(rate) && rate >= 0 && rate < 100 ? rate : 0,
     taxLabel: process.env.BILLING_TAX_LABEL?.trim() || "Sales tax",
     seller: {
-      name: process.env.SELLER_NAME?.trim() || "TablePulse",
+      name: process.env.SELLER_NAME?.trim() || "Table & Bell",
       address: process.env.SELLER_ADDRESS?.trim() || "",
       taxId: process.env.SELLER_TAX_ID?.trim() || "",
       email: process.env.SELLER_EMAIL?.trim() || "",
@@ -540,7 +540,7 @@ export async function recordManualPayment(o: { slug: string; months: number; amo
       p_period_start: start.toISOString(),
       p_period_end: end.toISOString(),
       p_method: o.method || "bank_transfer",
-      p_description: months === 1 ? PLAN_DESCRIPTION : `TablePulse Pro, ${months} months`,
+      p_description: months === 1 ? PLAN_DESCRIPTION : `Table & Bell Pro, ${months} months`,
       p_tax_rate: b.taxRate,
       p_tax_label: b.taxRate ? b.taxLabel : "",
       p_seller: b.seller,

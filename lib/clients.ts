@@ -68,8 +68,8 @@ async function issueOwnerInvite(admin: StaffContext, r: { id: string; slug: stri
   });
   if (error) return fail("server_error");
   const link = `${await siteOrigin()}/invite/${token}`;
-  const text = `Welcome to TablePulse, ${ownerName}. ${r.name} is set up. Open this link within ${OWNER_INVITE_DAYS} days to set your password and manage your restaurant: ${link}`;
-  const share = c.type === "phone" ? `https://wa.me/${c.value}?text=${encodeURIComponent(text)}` : `mailto:${c.value}?subject=${encodeURIComponent(`${r.name} on TablePulse`)}&body=${encodeURIComponent(text)}`;
+  const text = `Welcome to Table & Bell, ${ownerName}. ${r.name} is set up. Open this link within ${OWNER_INVITE_DAYS} days to set your password and manage your restaurant: ${link}`;
+  const share = c.type === "phone" ? `https://wa.me/${c.value}?text=${encodeURIComponent(text)}` : `mailto:${c.value}?subject=${encodeURIComponent(`${r.name} on Table & Bell`)}&body=${encodeURIComponent(text)}`;
   return { ok: true, value: { slug: r.slug, name: r.name, link, share, contact: c.type === "phone" ? `+${c.value}` : c.value } };
 }
 
@@ -84,7 +84,7 @@ export async function createClientRestaurant(admin: StaffContext, b: NewClientIn
 
   const contact = await parseContact(clean(b.ownerContact, 120));
   if (!contact) return fail("bad_contact");
-  // One login, one restaurant: the owner must not already have a TablePulse login.
+  // One login, one restaurant: the owner must not already have a Table & Bell login.
   if (await authUserExists(contact.type === "email" ? contact.value : phoneLoginEmail(contact.value))) return fail("account_exists");
 
   let businessPhone = "";
@@ -138,7 +138,7 @@ export async function createClientRestaurant(admin: StaffContext, b: NewClientIn
   await db.from("staff_activity").insert({
     restaurant_id: r.id,
     staff_id: admin.staff.userId,
-    staff_name: "TablePulse",
+    staff_name: "Table & Bell",
     staff_role: "admin",
     action: "client_created",
     target: name,

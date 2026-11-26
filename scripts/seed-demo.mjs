@@ -4,15 +4,22 @@
 // Needs every migration up to 0010 to have been run.
 //
 // The demo is set to Pro by hand so every feature (tables, loyalty, trivia) can be shown.
-// The demo login is public while SHOW_DEMO_LOGIN=1: turn that off once real restaurants use the site.
+// Demo login: email demo@tableandbell.com, password from DEMO_PASSWORD in .env.local (at least 10 characters).
+// The password is never written in the code or printed. Share it privately with people who ask for a demo.
+// Re-running this script also resets the password to DEMO_PASSWORD, so it is how you change it.
 import { createClient } from "@supabase/supabase-js";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-const EMAIL = "demo@tablepulse.app";
-const PASSWORD = "demo1234";
+const EMAIL = "demo@tableandbell.com";
+const OLD_EMAIL = "demo@tablepulse.app";
+const PASSWORD = process.env.DEMO_PASSWORD ?? "";
 const SLUG = "zaffran-ember";
 
+if (PASSWORD.length < 10) {
+  console.error("Set DEMO_PASSWORD (at least 10 characters) in .env.local first. It is the demo login password you share with prospects.");
+  process.exit(1);
+}
 if (!URL || !KEY) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY. Run with: node --env-file=.env.local scripts/seed-demo.mjs");
   process.exit(1);
@@ -24,6 +31,15 @@ const die = (msg, err) => {
 };
 
 // 1. Demo login (already confirmed, so no email is needed).
+// An older demo account (demo@tablepulse.app) is moved to the new email so the restaurant stays linked.
+{
+  const { data } = await db.auth.admin.listUsers({ perPage: 1000 });
+  const old = data?.users.find((u) => u.email === OLD_EMAIL);
+  if (old && !data.users.some((u) => u.email === EMAIL)) {
+    const { error } = await db.auth.admin.updateUserById(old.id, { email: EMAIL, email_confirm: true });
+    if (error) die("Could not move the old demo login to the new email:", error);
+  }
+}
 let userId;
 const created = await db.auth.admin.createUser({ email: EMAIL, password: PASSWORD, email_confirm: true });
 if (created.data?.user) {
@@ -408,5 +424,5 @@ await db.from("trivia_questions").delete().eq("restaurant_id", restaurantId);
 }
 
 console.log("Demo ready.");
-console.log(`  Host login: ${EMAIL} / ${PASSWORD}`);
+console.log(`  Host login: ${EMAIL} (password: your DEMO_PASSWORD)`);
 console.log(`  Guest page: /r/${SLUG}  (with SHOW_DEMO_LOGIN=1 it shows the Table 5, Floor and Kitchen demo links)`);

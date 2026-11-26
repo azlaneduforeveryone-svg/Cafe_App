@@ -9,6 +9,7 @@ import type { Dict } from "@/lib/i18n";
 export function uploadErrorText(t: Dict, code: string) {
   if (code === "image_type") return t.imageType;
   if (code === "image_too_big") return t.imageTooBig;
+  if (code === "demo_locked") return t.demoLocked;
   return t.errorGeneric;
 }
 

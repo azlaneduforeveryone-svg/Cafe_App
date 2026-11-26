@@ -1,11 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { fontVariables } from "./fonts";
 
 export const metadata: Metadata = {
-  title: "TablePulse | Restaurant waitlist and digital buzzer",
+  title: "Table & Bell | Restaurant waitlist and digital buzzer",
   description: "QR waitlist and digital buzzer for restaurants, in English, Arabic and Urdu.",
 };
 
@@ -18,11 +16,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={fontVariables}>
-      <body className="min-h-screen antialiased">
-        {children}
-        <Analytics />
-        <SpeedInsights />
-      </body>
+      <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
 }

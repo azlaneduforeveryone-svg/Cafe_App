@@ -1,4 +1,4 @@
-# TablePulse
+# Table & Bell
 
 QR waitlist and digital buzzer for restaurants. English, Arabic and Urdu with full right-to-left support. Same look as the Gemini demo, but every screen is real: logins, saved data and live sync between the host tablet and guest phones.
 
@@ -19,7 +19,7 @@ node --env-file=.env.local scripts/seed-demo.mjs
 
 | What | Where |
 | --- | --- |
-| Demo host login | `demo@tablepulse.app` / `demo1234` at `/login` |
+| Demo host login | `demo@tableandbell.com`, password from `DEMO_PASSWORD` (shared privately) |
 | Host tablet | `/dashboard` |
 | Guest page (the QR code points here) | `/r/zaffran-ember` |
 | Settings and printable QR | `/dashboard/settings` |

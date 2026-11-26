@@ -9,7 +9,7 @@ import { PAY_METHODS, type Bill, type BillLine, type BillSummary, type Entry, ty
  * The bill: split, tip, how the guest will pay, staff confirming payment, receipt and rating.
  *
  * Every amount is worked out in the database from orders the restaurant approved; the phone only
- * chooses tip %, split and method. TablePulse records payment, it does not take it, so the
+ * chooses tip %, split and method. Table & Bell records payment, it does not take it, so the
  * receipt is marked "not a tax invoice".
  */
 

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 import { AuthShell } from "@/components/AuthShell";
 import { getStaff } from "@/lib/auth";
-import { DEMO_EMAIL, DEMO_PASSWORD, safeNext, showDemoLogin } from "@/lib/demo";
+import { safeNext } from "@/lib/demo";
 import { dict } from "@/lib/i18n";
 import { hostLocale } from "@/lib/locale";
 
@@ -19,7 +19,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         t={t}
         defaultCountry="PK"
         initialError={error === "link" ? t.errLink : undefined}
-        demo={showDemoLogin() ? { email: DEMO_EMAIL, password: DEMO_PASSWORD } : undefined}
         next={dest}
       />
     </AuthShell>

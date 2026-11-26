@@ -38,7 +38,7 @@ In the Safepay **Test Dashboard** (sandbox):
    - Safepay's API takes amounts in paisa (600000 = PKR 6,000). If the dashboard asks for paisa, enter 600000.
 2. **Developers > API keys**: copy the **secret key**.
 3. **Developers > Endpoints > Add endpoint**:
-   - URL: `https://cafeapp-pi.vercel.app/api/webhooks/safepay` (Safepay can't reach `localhost`, so test on Vercel)
+   - URL: `https://tableandbell.com/api/webhooks/safepay` (Safepay can't reach `localhost`, so test on Vercel)
    - Events: `subscription.created`, `subscription.payment.succeeded`, `subscription.payment.failed`, `subscription.canceled`, `subscription.paused`, `subscription.resumed`, `subscription.unpaid`, `subscription.ended`, `subscription.updated`. Do **not** add `payment.succeeded`.
    - Copy the endpoint's **shared secret**.
 

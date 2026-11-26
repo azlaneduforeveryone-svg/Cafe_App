@@ -2,7 +2,7 @@ import { ChefHat, LayoutGrid, Smartphone } from "lucide-react";
 import type { Dict } from "@/lib/i18n";
 
 /** "Try the demo" panel on the demo restaurant's page. Plain links; nothing secret beyond the demo itself. */
-export function DemoLinks({ t, table, email, password }: { t: Dict; table: string | null; email: string; password: string }) {
+export function DemoLinks({ t, table }: { t: Dict; table: string | null }) {
   const link = "flex items-center gap-3 p-3 rounded-xl bg-white border border-line hover:border-ink text-start";
   return (
     <section className="mb-5 p-4 rounded-2xl bg-amber-50 border border-gold space-y-3" aria-label={t.demoTitle}>
@@ -35,12 +35,7 @@ export function DemoLinks({ t, table, email, password }: { t: Dict; table: strin
           </span>
         </a>
       </div>
-      <p className="text-[11px] text-stone-600">
-        {t.demoLogin}{" "}
-        <bdi dir="ltr" className="font-bold">
-          {email} / {password}
-        </bdi>
-      </p>
+      <p className="text-[11px] text-stone-600">{t.demoAskLogin}</p>
     </section>
   );
 }
