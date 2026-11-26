@@ -72,7 +72,7 @@ export default async function SettingsPage() {
           <p className="text-xs text-stone-500 no-print">{t.qrBody}</p>
           {isLocal && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 no-print">{t.qrLocalTip}</p>}
         </section>
-        <section className="space-y-3 no-print">
+        <section className="lg:col-span-12 space-y-3 no-print">
           <h2 className="text-sm font-extrabold">{t.helpTitle}</h2>
           <ContactEmails t={t} kinds={["support", "billing"]} />
         </section>
