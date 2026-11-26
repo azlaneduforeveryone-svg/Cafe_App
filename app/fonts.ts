@@ -10,6 +10,9 @@ import localFont from "next/font/local";
  *   Urdu     UI: Gulzar (compact Nastaliq)    headings: Noto Nastaliq Urdu
  * The Arabic and Urdu files hold Arabic script only; Latin letters and digits inside them (prices,
  * ticket numbers) use Plus Jakarta Sans so they stay crisp.
+ *
+ * Only Plus Jakarta Sans is preloaded. The rest (about 1 MB) download only when a page actually
+ * shows Arabic, Urdu or a Playfair heading, so English visitors never fetch the Nastaliq files.
  */
 export const jakarta = localFont({
   src: [
@@ -29,6 +32,7 @@ export const playfair = localFont({
   ],
   variable: "--ff-playfair",
   display: "swap",
+  preload: false,
 });
 export const plexArabic = localFont({
   src: [
@@ -39,6 +43,7 @@ export const plexArabic = localFont({
   ],
   variable: "--ff-plex-ar",
   display: "swap",
+  preload: false,
 });
 export const amiri = localFont({
   src: [
@@ -47,11 +52,13 @@ export const amiri = localFont({
   ],
   variable: "--ff-amiri",
   display: "swap",
+  preload: false,
 });
 export const gulzar = localFont({
   src: [{ path: "./fonts/gulzar-arabic-400-normal.woff2", weight: "400", style: "normal" }],
   variable: "--ff-gulzar",
   display: "swap",
+  preload: false,
 });
 export const nastaliq = localFont({
   src: [
@@ -60,6 +67,7 @@ export const nastaliq = localFont({
   ],
   variable: "--ff-nastaliq",
   display: "swap",
+  preload: false,
 });
 
 export const fontVariables = [jakarta, playfair, plexArabic, amiri, gulzar, nastaliq].map((f) => f.variable).join(" ");

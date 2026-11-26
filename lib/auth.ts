@@ -3,7 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
 import { adminClient } from "./supabase/admin";
-import { getRestaurantById } from "./queue";
+import { toRestaurant, type RestaurantRow } from "./queue";
 import { can, homeFor, type Permission } from "./permissions";
 import type { Restaurant, Staff } from "./types";
 
@@ -24,10 +24,10 @@ export const getStaff = cache(async (): Promise<StaffContext | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: row } = await adminClient().from("staff").select("restaurant_id, name, role, phone").eq("user_id", user.id).maybeSingle();
-  if (!row) return null;
-  const restaurant = await getRestaurantById(row.restaurant_id as string);
-  if (!restaurant) return null;
+  // Staff row and restaurant in one round trip (saves a second database call on every staff page).
+  const { data: row } = await adminClient().from("staff").select("name, role, phone, restaurant:restaurants(*)").eq("user_id", user.id).maybeSingle();
+  if (!row || !row.restaurant) return null;
+  const restaurant = toRestaurant(row.restaurant as unknown as RestaurantRow);
 
   return {
     staff: {

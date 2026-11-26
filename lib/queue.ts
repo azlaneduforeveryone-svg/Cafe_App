@@ -34,7 +34,7 @@ const fail = (error: string, status: number) => ({ ok: false as const, error, st
 // Row mapping (database uses snake_case and ISO timestamps)
 // ---------------------------------------------------------------------------
 
-interface RestaurantRow {
+export interface RestaurantRow {
   id: string;
   slug: string;
   name: string;
