@@ -459,3 +459,11 @@ A trivia game now belongs to a table session or a waiting party (never both). Th
 - Vercel: delete `SHOW_DEMO_LOGIN`. Add `CONTACT_WHATSAPP` (digits only, e.g. 9665XXXXXXXX) and `CONTACT_EMAIL` for Production. Redeploy.
 - Landing page: "Book a demo" WhatsApp button and a contact line in the footer. No demo credentials anywhere.
 - On the demo restaurant these are refused: staff invites, role changes, removing staff, photo and logo uploads, guest contact and legal details, billing, password reset.
+
+## Phase 7f: Security Advisor fixes (0015)
+
+- SQL Editor: run `supabase/migrations/0015_security_advisor.sql`, then `0016_fk_indexes.sql` (both safe to run twice).
+- Expected Security Advisor result afterwards: the "Function Search Path Mutable" and "SECURITY DEFINER function executable" warnings are gone.
+- "RLS Enabled No Policy" (INFO) on every table is intentional: browsers never read the database; only the server (service role) does. Do not add policies.
+- Performance Advisor: "Unindexed foreign keys" is fixed by 0016. "Unused Index" on billing_events_open_idx is expected until real billing events exist; keep it.
+- "Leaked Password Protection Disabled": turn it on under Authentication > Sign In / Providers > Email (Prevent use of leaked passwords) once the organization is on Supabase Pro; it is a paid-plan feature.
