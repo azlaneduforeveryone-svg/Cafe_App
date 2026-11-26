@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { HostTopBar } from "@/components/HostTopBar";
 import { LocaleRoot } from "@/components/LocaleRoot";
 import { BusinessCard } from "@/components/host/BusinessCard";
+import { ContactEmails } from "@/components/ContactEmails";
 import { LogoCard } from "@/components/host/LogoCard";
 import { can } from "@/lib/permissions";
 import { PrintButton } from "@/components/host/PrintButton";
@@ -70,6 +71,10 @@ export default async function SettingsPage() {
           </div>
           <p className="text-xs text-stone-500 no-print">{t.qrBody}</p>
           {isLocal && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 no-print">{t.qrLocalTip}</p>}
+        </section>
+        <section className="space-y-3 no-print">
+          <h2 className="text-sm font-extrabold">{t.helpTitle}</h2>
+          <ContactEmails t={t} kinds={["support", "billing"]} />
         </section>
       </main>
     </LocaleRoot>

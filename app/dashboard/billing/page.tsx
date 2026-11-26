@@ -1,6 +1,7 @@
 import { HostTopBar } from "@/components/HostTopBar";
 import { LocaleRoot } from "@/components/LocaleRoot";
 import { BillingView } from "@/components/host/BillingView";
+import { ContactEmails } from "@/components/ContactEmails";
 import { requireStaff } from "@/lib/auth";
 import { accessOf, billingConfig, canPayOnline, latestSubscription, listInvoices, priceOf } from "@/lib/billing";
 import { fmt } from "@/lib/format";
@@ -37,6 +38,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         freeLimit={FREE_LIMIT}
         checkout={checkout === "return" || checkout === "cancelled" ? checkout : null}
       />
+      <section className="max-w-3xl mx-auto px-4 pb-10 space-y-3">
+        <h2 className="text-sm font-extrabold">{t.helpTitle}</h2>
+        <ContactEmails t={t} kinds={["billing", "support"]} />
+      </section>
     </LocaleRoot>
   );
 }

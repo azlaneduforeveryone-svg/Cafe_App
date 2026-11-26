@@ -36,9 +36,9 @@ export function billingConfig() {
       name: process.env.SELLER_NAME?.trim() || "Table & Bell",
       address: process.env.SELLER_ADDRESS?.trim() || "",
       taxId: process.env.SELLER_TAX_ID?.trim() || "",
-      email: process.env.SELLER_EMAIL?.trim() || "",
+      email: process.env.SELLER_EMAIL?.trim() || "billing@tableandbell.com",
     },
-    salesContact: process.env.SALES_CONTACT?.trim() || "",
+    salesContact: process.env.SALES_CONTACT?.trim() || "sales@tableandbell.com",
     adminEmails: (process.env.ADMIN_EMAILS ?? "")
       .split(",")
       .map((s) => s.trim().toLowerCase())

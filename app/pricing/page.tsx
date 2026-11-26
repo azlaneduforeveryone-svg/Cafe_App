@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ContactEmails } from "@/components/ContactEmails";
 import { Check, CheckCircle2, Crown, MessageSquare, ShieldCheck } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { HostTopBar } from "@/components/HostTopBar";
@@ -162,6 +163,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             </div>
           </div>
         </div>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-extrabold text-center">{t.pricingQuestions}</h2>
+          <ContactEmails t={t} kinds={["sales", "billing"]} className="max-w-2xl mx-auto" />
+        </section>
 
         {ctx && (
           <div className="text-center">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Clock, Globe, Mail, MessageCircle, QrCode, Smartphone, Sparkles, Timer, Users } from "lucide-react";
+import { Bell, Clock, Globe, MessageCircle, QrCode, Smartphone, Sparkles, Timer, Users } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { BrandIntro } from "@/components/BrandIntro";
 import { LangSwitch } from "@/components/LangSwitch";
@@ -9,6 +9,7 @@ import { fmt } from "@/lib/format";
 import { dict } from "@/lib/i18n";
 import { HOST_COOKIE, hostLocale } from "@/lib/locale";
 import { FREE_LIMIT, getRestaurantBySlug } from "@/lib/queue";
+import { ContactEmails } from "@/components/ContactEmails";
 import { salesContact } from "@/lib/contact";
 import { DEMO_SLUG } from "@/lib/demo";
 
@@ -156,24 +157,25 @@ export default async function Landing() {
         </section>
       </main>
 
-      <footer className="border-t border-line py-6 text-center text-xs text-stone-500 space-y-2">
-        {(contact.whatsapp || contact.email) && (
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm">
-            <span className="font-bold text-ink">{t.contactUs}</span>
+      <section id="contact" className="border-t border-line bg-cream">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-extrabold">{t.contactUs}</h2>
+              <p className="text-sm text-stone-600">{t.contactSub}</p>
+            </div>
             {contact.whatsapp && (
-              <a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-ember">
+              <a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#128c4b] hover:bg-[#0f7a41] text-white text-sm font-extrabold">
                 <MessageCircle className="w-4 h-4" aria-hidden />
                 <bdi dir="ltr">+{contact.whatsapp}</bdi>
               </a>
             )}
-            {contact.email && (
-              <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-ember">
-                <Mail className="w-4 h-4" aria-hidden />
-                <bdi dir="ltr">{contact.email}</bdi>
-              </a>
-            )}
           </div>
-        )}
+          <ContactEmails t={t} kinds={["hello", "sales", "support"]} />
+        </div>
+      </section>
+
+      <footer className="border-t border-line py-6 text-center text-xs text-stone-500">
         <p>{t.footer}</p>
       </footer>
     </LocaleRoot>
