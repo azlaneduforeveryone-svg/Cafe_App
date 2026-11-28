@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BookOpen, Brain, CheckCircle2, Clock, Footprints, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
+import { Bell, BookOpen, Brain, CheckCircle2, Clock, Footprints, Share2, ShoppingBag, Smartphone, Utensils, Volume2 } from "lucide-react";
 import { BillCard } from "./BillCard";
 import { MenuSheet } from "./MenuSheet";
 import { TriviaSheet } from "./TriviaSheet";
@@ -181,6 +181,8 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
               </span>
             </button>
           )}
+
+          {data.viewToken && <ShareParty t={t} url={`/r/${slug}/p/${data.viewToken}`} />}
 
           <div className="space-y-2">
             <div className="p-3 rounded-2xl bg-white/80 border border-line text-[11px] text-stone-600 flex items-start gap-2.5">
@@ -510,5 +512,38 @@ function TableCard({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Shares a view-only link with the rest of the party (QA report SEC-10): they can follow the line
+ * and play trivia, but can't leave the line or order. The ticket's own link stays private.
+ */
+function ShareParty({ t, url }: { t: Dict; url: string }) {
+  const [copied, setCopied] = useState(false);
+  async function share() {
+    const full = `${window.location.origin}${url}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: t.shareTitle, text: t.shareText, url: full });
+        return;
+      }
+      await navigator.clipboard.writeText(full);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // The guest closed the share sheet: nothing to do.
+    }
+  }
+  return (
+    <button type="button" onClick={share} className="w-full p-3.5 rounded-2xl bg-white border border-line flex items-center gap-3 text-start shadow-sm">
+      <span className="w-10 h-10 rounded-xl bg-amber-50 border border-gold/40 flex items-center justify-center shrink-0">
+        <Share2 className="w-5 h-5 text-ember" aria-hidden />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-extrabold text-sm">{copied ? t.shareCopied : t.shareParty}</span>
+        <span className="block text-[11px] text-stone-500">{t.sharePartySub}</span>
+      </span>
+    </button>
   );
 }

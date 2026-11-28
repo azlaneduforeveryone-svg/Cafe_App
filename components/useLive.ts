@@ -40,16 +40,22 @@ export function useLive<T extends { serverNow: number; channel: string }>(snapsh
     }
   }, [snapshotUrl]);
 
-  // Several pings in a row (e.g. two quick taps) cause one reload.
+  // Several pings in a row (e.g. two quick taps) cause one reload, and pings never cause more
+  // than one reload a second, so a flood of fake pings can't hammer the server.
+  const lastRun = useRef(0);
   const scheduleRefresh = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void refresh(), 150);
+    const wait = Math.max(150, lastRun.current + 1000 - Date.now());
+    timer.current = setTimeout(() => {
+      lastRun.current = Date.now();
+      void refresh();
+    }, wait);
   }, [refresh]);
 
   useEffect(() => {
     const supabase = browserClient();
     const channel = supabase
-      ?.channel(`tp:${initial.channel}`)
+      ?.channel(initial.channel)
       .on("broadcast", { event: "change" }, scheduleRefresh)
       .subscribe((status) => {
         setConnected(status === "SUBSCRIBED");

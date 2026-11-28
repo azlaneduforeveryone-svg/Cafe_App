@@ -58,6 +58,8 @@ export interface Staff {
 export interface Entry {
   id: string;
   token: string;
+  /** View-only party link (watch + trivia). Null for old entries. */
+  viewToken: string | null;
   restaurantId: string;
   ticketNumber: number;
   name: string;
@@ -143,8 +145,10 @@ export interface HostTable {
 
 export interface TicketSnapshot {
   serverNow: number;
-  /** Restaurant id, used as the live-update channel name. */
+  /** Live-update channel for this restaurant's guest screens. */
   channel: string;
+  /** For the "share with your party" link while waiting. Null once seated or gone. */
+  viewToken: string | null;
   restaurant: PublicRestaurant;
   entry: {
     ticketNumber: number;
@@ -167,6 +171,19 @@ export interface TicketSnapshot {
   /** Present after the guest is seated. */
   table: { open: boolean; label: string; orders: Order[]; bill: Bill | null; loyalty: LoyaltyPromo | null; atTable: boolean } | null;
   /** Trivia is on here (shown to parties still waiting). */
+  triviaOn: boolean;
+}
+
+/** What the party sees from a view-only link (SEC-10): no names, phones, orders or actions. */
+export interface PartySnapshot {
+  serverNow: number;
+  channel: string;
+  restaurant: PublicRestaurant;
+  entry: { ticketNumber: number; partySize: number; status: EntryStatus; onTheWay: boolean; notifiedAt: number | null; tableLabel: string };
+  position: number;
+  ahead: number;
+  eta: number;
+  nowServing: number;
   triviaOn: boolean;
 }
 

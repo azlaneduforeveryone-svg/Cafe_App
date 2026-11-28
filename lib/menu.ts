@@ -2,7 +2,7 @@ import "server-only";
 import { cleanText } from "./text";
 import { notifyOutOfStock, notifyReady } from "./notify";
 import { adminClient } from "./supabase/admin";
-import { broadcastChange } from "./realtime";
+import { broadcastChange, staffChannel } from "./realtime";
 import { deleteImage, ownsPath, publicUrl } from "./media";
 import { PRICING } from "./pricing";
 import { ALLERGENS, SPICE_LEVELS, type Allergen, type MealPeriod, type Menu, type MenuCategory, type MenuItem, type Order, type OrderLine, type OrderStatus, type Portion, type Restaurant, type SpiceLevel, type Station } from "./types";
@@ -629,7 +629,7 @@ export async function kitchenSnapshot(r: Restaurant): Promise<KitchenSnapshot> {
       tickets.push({ orderId: o.id, station, where, round: o.round, kind: o.kind, acceptedAt: o.acceptedAt ?? o.updatedAt, note: o.note, lines });
     }
   }
-  return { serverNow: Date.now(), channel: r.id, stations: r.stations ?? [], tickets };
+  return { serverNow: Date.now(), channel: staffChannel(r.id), stations: r.stations ?? [], tickets };
 }
 
 export async function stationReady(r: Restaurant, orderId: string, station: unknown): Promise<Result> {

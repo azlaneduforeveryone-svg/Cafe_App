@@ -2,7 +2,7 @@ import "server-only";
 import { cleanText } from "./text";
 import { cookies } from "next/headers";
 import { adminClient } from "./supabase/admin";
-import { broadcastChange } from "./realtime";
+import { broadcastChange, guestChannel, staffChannel } from "./realtime";
 import { allOrdersForEntries, cartOf, currencyOf, hasMenu, toOrder } from "./menu";
 import { getRestaurantById, toPublic } from "./queue";
 import { RECEIPT_HOURS, billFor, billSummaries, ratingSince } from "./bills";
@@ -298,7 +298,7 @@ export async function guestSnapshot(tableId: string, anySession: SessionRow | nu
   const wifiRow = rest.data as { wifi_ssid: string; wifi_password: string } | null;
   return {
     serverNow: Date.now(),
-    channel: r.id,
+    channel: guestChannel(r.id),
     restaurant: toPublic(r),
     table: { id: table.id, number: table.number },
     open: !!s,
@@ -436,7 +436,7 @@ export async function floorSnapshot(r: Restaurant, viewer: Viewer): Promise<Floo
     : { data: [] };
   return {
     serverNow: Date.now(),
-    channel: r.id,
+    channel: staffChannel(r.id),
     currency: currencyOf(r),
     country: r.country,
     loyaltyMode: r.loyalty.mode,

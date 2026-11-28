@@ -4,11 +4,12 @@ import { billForEntry, billSummaries } from "./bills";
 import { loyaltyPromo } from "./loyalty";
 import { inbox } from "./notify";
 import { adminClient } from "./supabase/admin";
-import { broadcastChange } from "./realtime";
+import { broadcastChange, guestChannel, staffChannel } from "./realtime";
 import { isLocale } from "./i18n";
 import { publicUrl } from "./media";
 import { allOrdersForEntries, cancelOpenOrder, currencyOf, hasMenu, orderForEntry, ordersForEntries, TABLE_HOURS, tableIsOpen } from "./menu";
 import type {
+  PartySnapshot,
   Country,
   LoyaltyMode,
   Entry,
@@ -73,6 +74,7 @@ export interface RestaurantRow {
 interface EntryRow {
   id: string;
   token: string;
+  view_token?: string | null;
   restaurant_id: string;
   ticket_number: number;
   name: string;
@@ -140,6 +142,7 @@ function toEntry(row: EntryRow): Entry {
   return {
     id: row.id,
     token: row.token,
+    viewToken: row.view_token ?? null,
     restaurantId: row.restaurant_id,
     ticketNumber: row.ticket_number,
     name: row.name,
@@ -284,7 +287,7 @@ export async function hostSnapshot(r: Restaurant, viewerId?: string): Promise<Ho
   return {
     inbox: viewerId ? await inbox(viewerId) : [],
     serverNow: Date.now(),
-    channel: r.id,
+    channel: staffChannel(r.id),
     restaurant: {
       ...toPublic(r),
       plan: r.plan,
@@ -336,6 +339,37 @@ export async function entryByToken(token: string): Promise<Entry | null> {
   return data ? toEntry(data as EntryRow) : null;
 }
 
+/** The view-only party link: can watch the ticket and play trivia, nothing else. */
+export async function entryByViewToken(viewToken: string): Promise<Entry | null> {
+  if (!/^[0-9a-f]{32}$/.test(viewToken)) return null;
+  const { data } = await adminClient().from("entries").select("*").eq("view_token", viewToken).maybeSingle();
+  return data ? toEntry(data as EntryRow) : null;
+}
+
+/** What the rest of the party sees from a view-only link. No names of others, no phone, no orders. */
+export async function partySnapshot(viewToken: string): Promise<PartySnapshot | null> {
+  const e = await entryByViewToken(viewToken);
+  if (!e) return null;
+  const r = await getRestaurantById(e.restaurantId);
+  if (!r) return null;
+  let position = 0;
+  if (e.status === "waiting") {
+    const { data } = await adminClient().from("entries").select("id").eq("restaurant_id", r.id).eq("status", "waiting").order("joined_at", { ascending: true });
+    position = ((data ?? []) as { id: string }[]).findIndex((x) => x.id === e.id) + 1;
+  }
+  return {
+    serverNow: Date.now(),
+    channel: guestChannel(r.id),
+    restaurant: toPublic(r),
+    entry: { ticketNumber: e.ticketNumber, partySize: e.partySize, status: e.status, onTheWay: e.onTheWay, notifiedAt: e.notifiedAt, tableLabel: e.tableLabel },
+    position,
+    ahead: Math.max(0, position - 1),
+    eta: position ? etaFor(r, position) : 0,
+    nowServing: r.nowServing,
+    triviaOn: r.triviaOn,
+  };
+}
+
 export async function ticketSnapshot(token: string): Promise<TicketSnapshot | null> {
   const e = await entryByToken(token);
   if (!e) return null;
@@ -355,7 +389,8 @@ export async function ticketSnapshot(token: string): Promise<TicketSnapshot | nu
 
   return {
     serverNow: Date.now(),
-    channel: r.id,
+    channel: guestChannel(r.id),
+    viewToken: e.status === "waiting" || e.status === "notified" ? e.viewToken : null,
     restaurant: toPublic(r),
     entry: {
       ticketNumber: e.ticketNumber,
