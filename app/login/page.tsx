@@ -5,6 +5,14 @@ import { getStaff } from "@/lib/auth";
 import { safeNext } from "@/lib/demo";
 import { dict } from "@/lib/i18n";
 import { hostLocale } from "@/lib/locale";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Log in",
+  description: "Log in to your Table & Bell host stand.",
+  alternates: { canonical: "/login" },
+};
+
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; next?: string }> }) {
   const { error, next } = await searchParams;

@@ -63,15 +63,15 @@ export function KitchenView({ t, locale, initial, canAct = true, mode = "staff" 
     } else {
       await fetch(`/api/host/kitchen/${tk.orderId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ station: tk.station }) }).catch(() => null);
     }
+    await refresh();
     setBusy(null);
-    void refresh();
   }
 
   async function outOfStock(d: DeviceDish) {
     unlockAudio();
     setConfirmOut(null);
     await fetch("/api/kitchen-display", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "out", itemId: d.id }) }).catch(() => null);
-    void refresh();
+    await refresh();
   }
 
   return (

@@ -5,7 +5,7 @@ import { LangSwitch } from "./LangSwitch";
 import { LogoutButton } from "./LogoutButton";
 import { HOST_COOKIE } from "@/lib/locale";
 import { FREE_LIMIT, alertsUsedNow } from "@/lib/queue";
-import { restaurantName } from "@/lib/format";
+import { fmt, restaurantName } from "@/lib/format";
 import { getStaff } from "@/lib/auth";
 import { can, type Permission } from "@/lib/permissions";
 import type { Dict } from "@/lib/i18n";
@@ -39,6 +39,8 @@ export async function HostTopBar({
   ] as const;
   const nav = all.filter((n) => may(n.perm));
   const atLimit = restaurant.plan === "free" && alertsUsed >= FREE_LIMIT;
+  // On a free trial (not paid, not set to Pro by hand): show the days left, not "unlimited".
+  const trialDays = trialDaysLeft(restaurant);
 
   return (
     <header className="no-print sticky top-0 z-40 bg-ink text-cream border-b border-ink-2 shadow-lg">
@@ -48,18 +50,21 @@ export async function HostTopBar({
           <span className="hidden md:inline text-xs text-stone-400 truncate max-w-48">{restaurantName(restaurant, locale)}</span>
         </div>
 
-        <nav className="flex items-center bg-ink-2 p-1 rounded-xl border border-stone-700/70">
+        <nav className="flex items-center bg-ink-2 p-1 rounded-xl border border-stone-700/70 max-w-full overflow-x-auto">
           {nav.map(({ key, href, label, Icon }) => (
             <Link
               key={key}
               href={href}
               aria-current={active === key ? "page" : undefined}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              aria-label={label}
+              title={label}
+              className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 active === key ? "bg-ember text-white shadow" : "text-stone-300 hover:text-white"
               }`}
             >
               <Icon className="w-3.5 h-3.5" aria-hidden />
-              <span className="hidden sm:inline">{label}</span>
+              {/* Tablets show icons (with the current page named); wide screens show every label. */}
+              <span className={active === key ? "hidden sm:inline" : "hidden xl:inline"}>{label}</span>
             </Link>
           ))}
         </nav>
@@ -78,7 +83,11 @@ export async function HostTopBar({
           >
             <Zap className="w-3.5 h-3.5" aria-hidden />
             {restaurant.plan === "pro" ? (
-              t.proUnlimited
+              trialDays !== null ? (
+                fmt(trialDays === 1 ? t.proTrialOneDay : t.proTrialDays, { n: trialDays })
+              ) : (
+                t.proUnlimited
+              )
             ) : (
               <span>
                 <span className="ltr">
@@ -95,4 +104,11 @@ export async function HostTopBar({
       </div>
     </header>
   );
+}
+
+/** Whole days left of a free Pro trial, or null if this restaurant isn't on one. */
+function trialDaysLeft(r: Restaurant): number | null {
+  const now = Date.now();
+  if (r.basePlan === "pro" || (r.proUntil && r.proUntil > now) || !r.trialEndsAt || r.trialEndsAt <= now) return null;
+  return Math.max(1, Math.ceil((r.trialEndsAt - now) / 86_400_000));
 }

@@ -451,6 +451,25 @@ export async function hostAction(r: Restaurant, entryId: string, action: HostAct
   if (!/^[0-9a-f-]{36}$/i.test(entryId)) return fail("not_found", 404);
   let ticketNumber: number;
 
+  // A walk-in with no phone can't be buzzed: the host calls their name out loud. Mark them
+  // "called" (same look on the queue) without using one of the plan's buzzer alerts.
+  if (action === "notify") {
+    const { data: walk } = await adminClient()
+      .from("entries")
+      .update({ status: "notified", notified_at: new Date().toISOString() })
+      .eq("id", entryId)
+      .eq("restaurant_id", r.id)
+      .eq("source", "walkin")
+      .eq("phone", "")
+      .in("status", ACTIVE)
+      .select("ticket_number")
+      .maybeSingle();
+    if (walk) {
+      await broadcastChange(r.id);
+      return { ok: true, value: { ticketNumber: (walk as { ticket_number: number }).ticket_number } };
+    }
+  }
+
   if (action === "notify") {
     const { data, error } = await adminClient()
       .rpc("tp_notify", { p_restaurant_id: r.id, p_entry_id: entryId, p_free_limit: FREE_LIMIT })

@@ -130,18 +130,18 @@ export function LoyaltyAdmin({
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="text-sm font-bold space-y-1">
               <span>{t.loyStampsNeeded}</span>
-              <input type="number" min={3} max={20} value={stampsNeeded} disabled={!owner} onChange={(e) => setStampsNeeded(e.target.value)} className={field} />
+              <input type="number" onWheel={(e) => e.currentTarget.blur()} min={3} max={20} value={stampsNeeded} disabled={!owner} onChange={(e) => setStampsNeeded(e.target.value)} className={field} />
             </label>
             <label className="text-sm font-bold space-y-1">
               <span>{fmt(t.loyMinSpendLabel, { c: currency })}</span>
-              <input type="number" min={0} step="0.5" value={minSpend} disabled={!owner} onChange={(e) => setMinSpend(e.target.value)} className={field} />
+              <input type="number" onWheel={(e) => e.currentTarget.blur()} min={0} step="0.5" value={minSpend} disabled={!owner} onChange={(e) => setMinSpend(e.target.value)} className={field} />
             </label>
           </div>
         )}
         {mode === "points" && (
           <label className="text-sm font-bold space-y-1 block max-w-xs">
             <span>{fmt(t.loySpendPerPoint, { c: currency })}</span>
-            <input type="number" min={1} step="1" value={perPoint} disabled={!owner} onChange={(e) => setPerPoint(e.target.value)} className={field} />
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} min={1} step="1" value={perPoint} disabled={!owner} onChange={(e) => setPerPoint(e.target.value)} className={field} />
             <span className="block text-xs font-normal text-stone-500">{fmt(t.loyPerPointHint, { amount: money(Number(perPoint) || 0, currency) })}</span>
           </label>
         )}
@@ -318,7 +318,7 @@ function RewardRow({
         {k === "points" ? (
           <label className="text-sm font-bold flex items-center gap-2">
             {t.loyCost}
-            <input type="number" min={1} value={cost} onChange={(e) => setCost(e.target.value)} className={`${field} w-24`} />
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} min={1} value={cost} onChange={(e) => setCost(e.target.value)} className={`${field} w-24`} />
           </label>
         ) : (
           <span className="text-xs text-stone-600">

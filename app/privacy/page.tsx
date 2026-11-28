@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalDoc, type LegalSection } from "@/components/LegalDoc";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Table & Bell",
+  title: "Privacy Policy",
   description: "How Table & Bell collects, uses and protects the information of restaurant guests, staff and owners.",
   alternates: { canonical: "/privacy" },
 };

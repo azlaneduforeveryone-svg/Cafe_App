@@ -95,10 +95,10 @@ export function SettingsForm({ t, initial }: { t: Dict; initial: Values }) {
       <Card title={t.timingTitle}>
         <div className="grid sm:grid-cols-2 gap-4">
           <Labeled label={t.graceLabel} help={t.graceHelp}>
-            <input type="number" min={1} max={30} required value={v.gracePeriodMin} onChange={(e) => set("gracePeriodMin", Number(e.target.value))} className={input} />
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} min={1} max={30} required value={v.gracePeriodMin} onChange={(e) => set("gracePeriodMin", Number(e.target.value))} className={input} />
           </Labeled>
           <Labeled label={t.turnLabel} help={t.turnHelp}>
-            <input type="number" min={1} max={60} required value={v.minutesPerParty} onChange={(e) => set("minutesPerParty", Number(e.target.value))} className={input} />
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} min={1} max={60} required value={v.minutesPerParty} onChange={(e) => set("minutesPerParty", Number(e.target.value))} className={input} />
           </Labeled>
         </div>
       </Card>

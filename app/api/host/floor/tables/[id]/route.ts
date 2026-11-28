@@ -1,3 +1,4 @@
+import { adminClient } from "@/lib/supabase/admin";
 import { mayUseTable } from "@/lib/access";
 import { logActivity } from "@/lib/activity";
 import { fail, json, readBody, withStaff } from "@/lib/api";
@@ -41,7 +42,11 @@ export async function POST(req: Request, { params }: Ctx) {
             : body.action === "seat"
               ? await seatAtTable(restaurant, id, body.entryId)
               : { ok: false as const, error: "invalid", status: 400 };
-    if (res.ok && body.action === "close") await logActivity(ctx, "table_closed", id);
+    if (res.ok && body.action === "close") {
+      // Log the table's name (for example "T4"), not its internal id.
+      const { data: tb } = await adminClient().from("restaurant_tables").select("table_number").eq("id", id).eq("restaurant_id", restaurant.id).maybeSingle();
+      await logActivity(ctx, "table_closed", (tb?.table_number as string | undefined) ?? "");
+    }
     return res.ok ? json({ ok: true }) : fail(res.error, res.status);
   });
 }

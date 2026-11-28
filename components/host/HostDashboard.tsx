@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, MessageSquare, Phone, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
+import { AlertTriangle, Bell, ChevronDown, Crown, Footprints, LayoutList, Megaphone, MessageSquare, Phone, PhoneOff, Plus, QrCode, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { BillStrip, MarkPaidModal, type PaidExtras } from "./MarkPaid";
 import { KitchenAlerts } from "./KitchenAlerts";
@@ -20,7 +20,7 @@ const input = "w-full px-3 py-2.5 rounded-xl border border-line text-sm bg-white
 export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: Locale; initial: HostSnapshot; role: Role }) {
   // Buttons follow the role; the server checks every action again.
   const may = (p: Permission) => can(role, p);
-  const { data, connected, gone, clockOffset, refresh } = useLive("/api/host/snapshot", initial);
+  const { data, connected, gone, clockOffset, refresh, patch } = useLive("/api/host/snapshot", initial);
   const now = useNow(clockOffset);
   const { restaurant: r, entries, stats } = data;
 
@@ -52,8 +52,18 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
   }, []);
 
   async function act(e: HostEntry, action: HostAction) {
+    if (pending === e.id) return; // a second tap while the first is still on its way does nothing
     unlockAudio();
     setPending(e.id);
+    const calledOnly = action === "notify" && isCallOnly(e);
+    // Show the result straight away; the server's answer and the refresh below confirm it.
+    patch((d) => ({
+      ...d,
+      entries:
+        action === "notify"
+          ? d.entries.map((x) => (x.id === e.id ? { ...x, status: "notified" as const, notifiedAt: Date.now() + clockOffset } : x))
+          : d.entries.filter((x) => x.id !== e.id),
+    }));
     try {
       const res = await fetch(`/api/host/entries/${e.id}`, {
         method: "POST",
@@ -65,25 +75,31 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
       } else if (!res.ok) {
         showToast(t.errorGeneric);
       } else {
-        if (action === "notify") playChime();
-        void refresh();
-        showToast(fmt(action === "notify" ? t.toastBuzzed : action === "seat" ? t.toastSeated : t.toastNoShow, { n: e.ticketNumber }));
+        if (action === "notify" && !calledOnly) playChime();
+        showToast(
+          fmt(action === "notify" ? (calledOnly ? t.toastCalled : t.toastBuzzed) : action === "seat" ? t.toastSeated : t.toastNoShow, {
+            n: e.ticketNumber,
+          }),
+        );
       }
     } catch {
       showToast(t.errorGeneric);
     }
+    await refresh(); // the real state (also undoes the quick change if the server said no)
     setPending(null);
   }
 
   async function orderAct(e: { ticketNumber: number }, orderId: string | undefined, action: "accept" | "cancel" | "served") {
-    if (!orderId) return;
+    if (!orderId || pending === orderId) return;
+    setPending(orderId);
     const res = await fetch(`/api/host/orders/${orderId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     }).catch(() => null);
     showToast(res?.ok ? (action === "served" ? `#${e.ticketNumber} ${t.stage_served}` : fmt(action === "accept" ? t.toastOrderAccepted : t.toastOrderCancelled, { n: e.ticketNumber })) : t.errorGeneric);
-    void refresh();
+    await refresh();
+    setPending(null);
   }
 
   async function tableAct(tb: HostTable, body: { label?: string; close?: boolean }) {
@@ -93,7 +109,7 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
       body: JSON.stringify(body),
     }).catch(() => null);
     if (!res?.ok) showToast(t.errorGeneric);
-    void refresh();
+    await refresh();
   }
 
   async function payAct(tb: HostTable, method: PayMethod, extras: PaidExtras) {
@@ -105,7 +121,7 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
         ? fmt(t.toastPaid, { n: tb.ticketNumber, r: out.receiptNo ?? "" }) + (out.loyaltyError ? ` · ${d[`loyErr_${out.loyaltyError}`] ?? t.loyErr_server_error}` : "")
         : out.error === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric,
     );
-    void refresh();
+    await refresh();
     return !!res?.ok;
   }
 
@@ -162,6 +178,7 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
               onTable={tableAct}
               onPay={setPaying}
               may={may}
+              pending={pending}
             />
           ) : (
           <div className="bg-white rounded-3xl border border-line shadow-xl overflow-hidden">
@@ -219,8 +236,10 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
                 <ul className="space-y-2.5">
                   {entries.map((e) => {
                     const notified = e.status === "notified";
+                    const callOnly = isCallOnly(e);
                     const left = notified && e.notifiedAt ? graceSec - (now - e.notifiedAt) / 1000 : graceSec;
-                    const overdue = notified && left <= 0;
+                    // No countdown for a walk-in without a phone: nothing reached them, the host called out.
+                    const overdue = notified && !callOnly && left <= 0;
                     return (
                       <li
                         key={e.id}
@@ -261,7 +280,16 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
                               <span>
                                 {t.waited} <span className="font-mono font-bold text-stone-700 ltr" suppressHydrationWarning>{mmss((now - e.joinedAt) / 1000)}</span>
                               </span>
-                              {notified && (
+                              {callOnly && (
+                                <>
+                                  <span aria-hidden>•</span>
+                                  <span className="inline-flex items-center gap-1 text-stone-500">
+                                    <PhoneOff className="w-3 h-3" aria-hidden />
+                                    {t.noPhone}
+                                  </span>
+                                </>
+                              )}
+                              {notified && !callOnly && (
                                 <>
                                   <span aria-hidden>•</span>
                                   <span className={overdue ? "text-red-700 font-bold" : "text-emerald-700 font-bold"}>
@@ -288,8 +316,8 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
                               notified ? "bg-emerald-600 hover:bg-emerald-700" : "bg-ember hover:bg-ember-dark"
                             }`}
                           >
-                            <Bell className="w-3.5 h-3.5" aria-hidden />
-                            {notified ? t.buzzAgain : t.notify}
+                            {callOnly ? <Megaphone className="w-3.5 h-3.5" aria-hidden /> : <Bell className="w-3.5 h-3.5" aria-hidden />}
+                            {callOnly ? (notified ? t.calledAgain : t.callOut) : notified ? t.buzzAgain : t.notify}
                           </button>
                           <button
                             type="button"
@@ -316,6 +344,7 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
                             order={e.order}
                             currency={r.currency}
                             onAction={(action) => orderAct(e, e.order?.id, action)}
+                            busy={pending === e.order.id}
                             canDecide={may("orders.pre")}
                             canServe={may("orders.serve")}
                           />
@@ -404,13 +433,14 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
           onPick={async (tableId) => {
             const e = seating;
             setSeating(null);
+            patch((d) => ({ ...d, entries: d.entries.filter((x) => x.id !== e.id) }));
             const res = await fetch(`/api/host/floor/tables/${tableId}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ action: "seat", entryId: e.id }),
             }).catch(() => null);
             showToast(res?.ok ? fmt(t.toastSeated, { n: e.ticketNumber }) : res?.status === 409 ? t.errTableBusy : t.errorGeneric);
-            void refresh();
+            await refresh();
           }}
         />
       )}
@@ -421,9 +451,9 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
           locale={locale}
           sections={r.sections}
           onClose={() => setWalkIn(false)}
-          onAdded={(n, name) => {
+          onAdded={async (n, name) => {
+            await refresh(); // the new party is on the list before the form closes
             setWalkIn(false);
-            void refresh();
             showToast(fmt(t.toastAdded, { n, name }));
           }}
         />
@@ -445,7 +475,7 @@ export function HostDashboard({ t, locale, initial, role }: { t: Dict; locale: L
       )}
 
       {toast && (
-        <div className="fixed bottom-5 inset-x-0 z-50 flex justify-center px-4 pointer-events-none" role="status" aria-live="polite">
+        <div className="fixed bottom-5 inset-x-0 z-[60] flex justify-center px-4 pointer-events-none" role="status" aria-live="polite">
           <div className="bg-ink text-white border border-gold/50 px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-sm font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden />
             {toast}
@@ -482,7 +512,7 @@ function WalkInModal({
   locale: Locale;
   sections: HostSnapshot["restaurant"]["sections"];
   onClose: () => void;
-  onAdded: (ticketNumber: number, name: string) => void;
+  onAdded: (ticketNumber: number, name: string) => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -495,7 +525,7 @@ function WalkInModal({
     const res = await fetch("/api/host/entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     if (res?.ok) {
       const { ticketNumber, name } = (await res.json()) as { ticketNumber: number; name: string };
-      onAdded(ticketNumber, name);
+      await onAdded(ticketNumber, name);
     } else {
       setError(true);
       setBusy(false);
@@ -513,9 +543,9 @@ function WalkInModal({
           <label className="block">
             <span className="block text-xs font-bold text-stone-700 mb-1">{t.partySize}</span>
             <select name="partySize" defaultValue="2" className={`${input} font-bold`}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map((n) => (
+              {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
-                  {n} {t.guests}
+                  {n} {n === 1 ? t.guestOne : t.guests}
                 </option>
               ))}
             </select>
@@ -568,6 +598,7 @@ function OrderPanel({
   onAction,
   canDecide,
   canServe,
+  busy = false,
 }: {
   t: Dict;
   locale: Locale;
@@ -577,6 +608,8 @@ function OrderPanel({
   onAction: (action: "accept" | "cancel" | "served") => void;
   canDecide: boolean;
   canServe: boolean;
+  /** True while this order's last tap is still on its way: buttons stay off. */
+  busy?: boolean;
 }) {
   const [open, setOpen] = useState(order.status === "submitted" || (!!order.readyAt && !order.servedAt));
   const count = order.items.reduce((n, l) => n + l.qty, 0);
@@ -613,17 +646,17 @@ function OrderPanel({
           )}
           <div className="flex justify-end gap-2">
             {canDecide && (
-            <button type="button" onClick={() => onAction("cancel")} className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
+            <button type="button" disabled={busy} onClick={() => onAction("cancel")} className="disabled:opacity-50 px-2.5 py-1.5 rounded-lg text-xs font-bold text-stone-600 hover:text-red-700 hover:bg-red-50">
               {t.cancelOrder}
             </button>
             )}
             {canServe && accepted && !order.servedAt && (
-              <button type="button" onClick={() => onAction("served")} className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-extrabold">
+              <button type="button" disabled={busy} onClick={() => onAction("served")} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-extrabold">
                 {t.markServed} ✓
               </button>
             )}
             {canDecide && !accepted && (
-              <button type="button" onClick={() => onAction("accept")} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
+              <button type="button" disabled={busy} onClick={() => onAction("accept")} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
                 {t.acceptOrder}
               </button>
             )}
@@ -645,6 +678,7 @@ function TablesPanel({
   onTable,
   onPay,
   may,
+  pending,
 }: {
   t: Dict;
   locale: Locale;
@@ -656,6 +690,7 @@ function TablesPanel({
   onTable: (tb: HostTable, body: { label?: string; close?: boolean }) => void;
   onPay: (tb: HostTable) => void;
   may: (p: Permission) => boolean;
+  pending: string | null;
 }) {
   const [closing, setClosing] = useState<string | null>(null);
   if (!tables.length) {
@@ -748,6 +783,7 @@ function TablesPanel({
                 currency={currency}
                 title={o.kind === "pre" ? t.preOrderTag : fmt(t.roundN, { n: o.round })}
                 onAction={(action) => onOrder(tb, o.id, action)}
+                busy={pending === o.id}
                 canDecide={may(o.kind === "pre" ? "orders.pre" : "orders.table")}
                 canServe={may("orders.serve")}
               />
@@ -827,4 +863,9 @@ function SeatModal({
       </div>
     </Modal>
   );
+}
+
+/** A walk-in with no phone: the host calls their name out loud instead of buzzing a phone. */
+function isCallOnly(e: HostEntry) {
+  return e.source === "walkin" && !e.phone;
 }

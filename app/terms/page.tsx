@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalDoc, type LegalSection } from "@/components/LegalDoc";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | Table & Bell",
+  title: "Terms of Service",
   description: "The terms that apply when a restaurant uses Table & Bell, and when guests use a restaurant's Table & Bell pages.",
   alternates: { canonical: "/terms" },
 };

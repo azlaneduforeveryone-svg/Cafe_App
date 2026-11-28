@@ -14,6 +14,14 @@ import { PRICING, money } from "@/lib/pricing";
 import { FREE_LIMIT } from "@/lib/queue";
 import type { Country } from "@/lib/types";
 import { LegalLinks } from "@/components/LegalLinks";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Plans and pricing",
+  description: "Start free, or go Pro for unlimited buzzer alerts, loyalty and more staff. 14-day free Pro trial, no card needed.",
+  alternates: { canonical: "/pricing" },
+};
+
 
 export default async function PricingPage({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
   const { region: q } = await searchParams;
@@ -35,7 +43,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             <Brand name={t.brand} />
             <div className="flex items-center gap-2">
               <LangSwitch current={locale} cookie={HOST_COOKIE} />
-              <Link href="/signup" className="px-3.5 py-2 rounded-xl bg-ember text-white text-xs font-extrabold">
+              <Link href="/signup" className="whitespace-nowrap px-3 sm:px-3.5 py-2 rounded-xl bg-ember text-white text-xs font-extrabold">
                 {t.signup}
               </Link>
             </div>
@@ -160,7 +168,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             </div>
             <div className="mt-5 pt-3 border-t border-stone-100">
               <p className="text-[11px] font-bold text-stone-500 mb-1">{t.payMethods}</p>
-              <p className="text-[11px] text-stone-500 ltr">{p.methods.join(" • ")}</p>
+              {p.methods.length > 0 ? (
+                <p className="text-[11px] text-stone-500 ltr">{p.methods.join(" • ")}</p>
+              ) : (
+                <p className="text-[11px] text-stone-500">{t.payMethodsInvoice}</p>
+              )}
             </div>
           </div>
         </div>

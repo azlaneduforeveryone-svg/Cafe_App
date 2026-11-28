@@ -2,7 +2,7 @@ import type { Country } from "./types";
 
 /**
  * Placeholder prices. Change them here; every page reads from this file.
- * Payment methods depend on which gateway you sign up with (see README).
+ * methods: only the ways a restaurant can really pay for Pro today (shown on /pricing).
  */
 export const PRICING: Record<
   Country,
@@ -15,7 +15,8 @@ export const PRICING: Record<
       { credits: 500, price: 49 },
       { credits: 1500, price: 129 },
     ],
-    methods: ["mada", "Apple Pay", "Visa / Mastercard", "STC Pay"],
+    // No online gateway in Saudi Arabia yet: Pro is invoiced and paid by bank transfer.
+    methods: [],
   },
   PK: {
     currency: "PKR",
@@ -24,7 +25,8 @@ export const PRICING: Record<
       { credits: 500, price: 2500 },
       { credits: 1500, price: 6500 },
     ],
-    methods: ["Raast", "JazzCash", "EasyPaisa", "Visa / Mastercard"],
+    // Only what checkout really offers today (Safepay card). Add wallets here when they go live.
+    methods: ["Visa / Mastercard"],
   },
 };
 

@@ -69,12 +69,21 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
   };
   const errText = (code?: string) =>
     code === "table_busy" ? t.errTableBusy : code === "duplicate_table" ? t.errDuplicateTable : code === "empty_bill" ? t.billErr_empty_bill : t.errorGeneric;
+  // The same tap while the first one is still on its way is ignored (no double orders or closes).
+  const inFlight = useRef(new Set<string>());
   async function run(url: string, body?: unknown, method?: string) {
+    const key = `${method ?? "POST"} ${url} ${JSON.stringify(body ?? null)}`;
+    if (inFlight.current.has(key)) return false;
+    inFlight.current.add(key);
     unlockAudio();
-    const r = await post(url, body, method);
-    if (!r.ok) show(errText(r.error));
-    void refresh();
-    return r.ok;
+    try {
+      const r = await post(url, body, method);
+      if (!r.ok) show(errText(r.error));
+      await refresh(); // the screen shows the result before the button can be used again
+      return r.ok;
+    } finally {
+      inFlight.current.delete(key);
+    }
   }
 
   async function pay(sessionId: string, method: PayMethod, extras: PaidExtras) {
@@ -82,7 +91,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
     const out = res ? ((await res.json().catch(() => ({}))) as { error?: string; receiptNo?: number; loyaltyError?: string | null }) : { error: "network" };
     if (!res?.ok) show(errText(out.error));
     else show(fmt(t.toastPaidTable, { r: out.receiptNo ?? "" }) + (out.loyaltyError ? ` · ${d[`loyErr_${out.loyaltyError}`] ?? t.loyErr_server_error}` : ""));
-    void refresh();
+    await refresh();
     return !!res?.ok;
   }
 
@@ -281,7 +290,7 @@ export function FloorView({ t, locale, initial }: { t: Dict; locale: Locale; ini
       {managing && <ManageTables t={t} locale={locale} sections={data.sections} tables={data.tables} staff={data.staff} onClose={() => setManaging(false)} run={run} />}
 
       {toast && (
-        <div className="fixed bottom-5 inset-x-0 z-50 flex justify-center px-4 pointer-events-none" role="status" aria-live="polite">
+        <div className="fixed bottom-5 inset-x-0 z-[60] flex justify-center px-4 pointer-events-none" role="status" aria-live="polite">
           <div className="bg-ink text-white px-4 py-2.5 rounded-full shadow-2xl text-sm font-semibold">{toast}</div>
         </div>
       )}
@@ -517,7 +526,7 @@ function ManageTables({
           return (
             <div key={tb.id} className="grid grid-cols-2 sm:grid-cols-[6rem_5rem_1fr_1fr_auto] gap-2 items-center">
               <input aria-label={t.tableNumberLbl} value={v.number} maxLength={12} onChange={(e) => set("number", e.target.value)} className={`${input} font-extrabold`} />
-              <input aria-label={t.capacityLbl} type="number" min={1} max={40} value={v.capacity} onChange={(e) => set("capacity", e.target.value)} className={`${input} ltr`} />
+              <input aria-label={t.capacityLbl} type="number" onWheel={(e) => e.currentTarget.blur()} min={1} max={40} value={v.capacity} onChange={(e) => set("capacity", e.target.value)} className={`${input} ltr`} />
               <select aria-label="section" value={v.sectionId} onChange={(e) => set("sectionId", e.target.value)} className={input}>
                 {sections.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -560,7 +569,7 @@ function ManageTables({
           }}
         >
           <input required placeholder={t.tableNumberLbl} value={draft.number} maxLength={12} onChange={(e) => setDraft({ ...draft, number: e.target.value })} className={`${input} font-extrabold`} />
-          <input type="number" min={1} max={40} value={draft.capacity} onChange={(e) => setDraft({ ...draft, capacity: e.target.value })} className={`${input} ltr`} />
+          <input type="number" onWheel={(e) => e.currentTarget.blur()} min={1} max={40} value={draft.capacity} onChange={(e) => setDraft({ ...draft, capacity: e.target.value })} className={`${input} ltr`} />
           <select value={draft.sectionId} onChange={(e) => setDraft({ ...draft, sectionId: e.target.value })} className={input}>
             {sections.map((s) => (
               <option key={s.id} value={s.id}>

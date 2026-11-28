@@ -19,7 +19,11 @@ export function useLive<T extends { serverNow: number; channel: string }>(snapsh
   const [clockOffset, setClockOffset] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Bumped by patch(): an answer that left before a local change is out of date, so it's dropped.
+  const stamp = useRef(0);
+
   const refresh = useCallback(async () => {
+    const started = stamp.current;
     try {
       const res = await fetch(snapshotUrl, { cache: "no-store" });
       if (res.status === 401 || res.status === 404) {
@@ -28,6 +32,7 @@ export function useLive<T extends { serverNow: number; channel: string }>(snapsh
       }
       if (!res.ok) return;
       const next = (await res.json()) as T;
+      if (stamp.current !== started) return;
       setClockOffset(next.serverNow - Date.now());
       setData(next);
     } catch {
@@ -64,7 +69,13 @@ export function useLive<T extends { serverNow: number; channel: string }>(snapsh
     };
   }, [initial.channel, scheduleRefresh]);
 
-  return { data, connected, gone, clockOffset, refresh };
+  /** Show a change at once, before the server confirms it. The next refresh brings the real state. */
+  const patch = useCallback((fn: (d: T) => T) => {
+    stamp.current += 1;
+    setData(fn);
+  }, []);
+
+  return { data, connected, gone, clockOffset, refresh, patch };
 }
 
 /** Re-renders every second, for timers. Returns server-adjusted now. */

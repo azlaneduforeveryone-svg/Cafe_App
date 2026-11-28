@@ -13,6 +13,7 @@ import type { Dict } from "@/lib/i18n";
 import { money } from "@/lib/pricing";
 import type { TableGuestSnapshot } from "@/lib/tables";
 import type { Locale } from "@/lib/types";
+import { useBackClose } from "./useBackClose";
 
 type AlertType = "water" | "napkins" | "bill" | "help";
 
@@ -21,10 +22,12 @@ export function TableGuest({ t, locale, initial }: { t: Dict; locale: Locale; in
   const tableId = initial.table.id;
   const { data, gone, refresh } = useLive(`/api/table/${tableId}`, initial);
   const [showMenu, setShowMenu] = useState(false);
+  useBackClose(showMenu, () => setShowMenu(false));
   const [serviceOpen, setServiceOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [billSheet, setBillSheet] = useState(false);
   const [trivia, setTrivia] = useState(false);
+  useBackClose(trivia, () => setTrivia(false));
   const d = t as unknown as Record<string, string>;
   const open = data.open && !gone;
   const bill = data.bill;

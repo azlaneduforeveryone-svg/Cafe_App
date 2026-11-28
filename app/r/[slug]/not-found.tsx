@@ -1,0 +1,19 @@
+import { SearchX } from "lucide-react";
+import { LocaleRoot } from "@/components/LocaleRoot";
+import { dict } from "@/lib/i18n";
+import { hostLocale } from "@/lib/locale";
+
+/** A guest link that doesn't work (old QR code, closed ticket): point them to the host. */
+export default async function GuestNotFound() {
+  const locale = await hostLocale();
+  const t = dict(locale);
+  return (
+    <LocaleRoot locale={locale}>
+      <main className="flex-1 flex flex-col items-center justify-center text-center gap-3 p-8">
+        <SearchX className="w-10 h-10 text-ember" aria-hidden />
+        <h1 className="display text-2xl font-bold">{t.notFoundTitle}</h1>
+        <p className="text-sm text-stone-600">{t.notFoundBody}</p>
+      </main>
+    </LocaleRoot>
+  );
+}

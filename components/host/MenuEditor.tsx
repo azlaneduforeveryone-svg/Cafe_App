@@ -561,11 +561,11 @@ function ItemModal({
             <span className="block text-xs font-bold text-stone-700 mb-1">
               {t.price} ({currency})
             </span>
-            <input required type="number" min={0} step="0.01" inputMode="decimal" dir="ltr" value={d.price} onChange={(e) => set("price", e.target.value)} className={input} />
+            <input required type="number" onWheel={(e) => e.currentTarget.blur()} min={0} step="0.01" inputMode="decimal" dir="ltr" value={d.price} onChange={(e) => set("price", e.target.value)} className={input} />
           </label>
           <label className="block">
             <span className="block text-xs font-bold text-stone-700 mb-1">{t.compareAtPrice}</span>
-            <input type="number" min={0} step="0.01" inputMode="decimal" dir="ltr" value={d.compareAtPrice} onChange={(e) => set("compareAtPrice", e.target.value)} className={input} />
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} min={0} step="0.01" inputMode="decimal" dir="ltr" value={d.compareAtPrice} onChange={(e) => set("compareAtPrice", e.target.value)} className={input} />
             <span className="block text-[11px] text-stone-500 mt-1">{t.compareHelp}</span>
           </label>
           <label className="block">
@@ -676,7 +676,7 @@ function ItemModal({
                   ))}
                   <input
                     aria-label={t.price}
-                    type="number"
+                    type="number" onWheel={(e) => e.currentTarget.blur()}
                     min={0}
                     step="0.01"
                     dir="ltr"

@@ -13,6 +13,9 @@ import { ContactEmails } from "@/components/ContactEmails";
 import { salesContact } from "@/lib/contact";
 import { DEMO_SLUG } from "@/lib/demo";
 import { LegalLinks } from "@/components/LegalLinks";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function Landing() {
   const locale = await hostLocale();
@@ -37,10 +40,10 @@ export default async function Landing() {
   return (
     <LocaleRoot locale={locale}>
       <header className="bg-ink text-cream">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3">
           <Brand name={t.brand} />
           <div className="flex items-center gap-2">
-            <Link href="/pricing" className="hidden sm:inline text-xs font-semibold text-stone-300 hover:text-white px-2">
+            <Link href="/pricing" className="whitespace-nowrap text-xs font-semibold text-stone-300 hover:text-white px-1 sm:px-2">
               {t.plans}
             </Link>
             <LangSwitch current={locale} cookie={HOST_COOKIE} />
@@ -49,7 +52,7 @@ export default async function Landing() {
                 {t.dashboard}
               </Link>
             ) : (
-              <Link href="/login" className="px-3.5 py-2 rounded-xl bg-ink-2 border border-stone-700 hover:bg-stone-800 text-white text-xs font-bold">
+              <Link href="/login" className="whitespace-nowrap px-3 sm:px-3.5 py-2 rounded-xl bg-ink-2 border border-stone-700 hover:bg-stone-800 text-white text-xs font-bold">
                 {t.login}
               </Link>
             )}

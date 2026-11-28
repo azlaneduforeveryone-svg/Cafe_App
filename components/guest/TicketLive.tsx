@@ -15,6 +15,7 @@ import { playChime, unlockAudio } from "@/lib/chime";
 import { fmt, mmss, sectionName, tr } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, Order, TicketSnapshot } from "@/lib/types";
+import { useBackClose } from "./useBackClose";
 
 type WakeLockLike = { release: () => Promise<void> };
 type NavWithWake = Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockLike> } };
@@ -23,6 +24,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
   const { data, connected, clockOffset, refresh } = useLive(`/api/ticket/${token}`, initial);
   // Trivia while waiting. It closes by itself the moment the table is ready, so the buzz screen shows.
   const [trivia, setTrivia] = useState(false);
+  useBackClose(trivia, () => setTrivia(false));
   const waiting = data.entry.status === "waiting";
 
   // Staff just seated this party at a real table: move them to the table page.
@@ -37,6 +39,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
   const [alertsOn, setAlertsOn] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  useBackClose(showMenu, () => setShowMenu(false));
   const [busy, setBusy] = useState(false);
   const lastBuzz = useRef(initial.entry.notifyCount);
   const wakeLock = useRef<WakeLockLike | null>(null);
@@ -280,6 +283,26 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
                 {t.onMyWay}
               </button>
             )}
+            {/* Can't come back: free the table for the next party instead of being a no-show. */}
+            {confirmLeave ? (
+              <div className="mt-3 p-3 rounded-xl bg-white/95 text-ink text-xs space-y-2">
+                <p className="font-semibold">{t.cantMakeItConfirm}</p>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setConfirmLeave(false)} className="px-3 py-1.5 rounded-lg font-bold text-stone-600 hover:bg-stone-100">
+                    {t.cancel}
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => send("leave")} className="px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold disabled:opacity-60">
+                    {t.cantMakeIt}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              !e.onTheWay && (
+                <button type="button" onClick={() => setConfirmLeave(true)} className="mt-3 w-full py-2 text-xs font-semibold text-emerald-50 hover:text-white underline">
+                  {t.cantMakeIt}
+                </button>
+              )
+            )}
           </div>
         </div>
       )}
@@ -332,7 +355,7 @@ export function TicketLive({ t, locale, token, initial }: { t: Dict; locale: Loc
           )}
         </div>
       )}
-      {trivia && waiting && <TriviaSheet t={t} locale={locale} endpoint={`/api/ticket/${token}/trivia`} goneText={t.trvWaitGone} onClose={() => setTrivia(false)} />}
+      {trivia && waiting && <TriviaSheet t={t} locale={locale} endpoint={`/api/ticket/${token}/trivia`} goneText={t.trvWaitGone} intro={t.trvWaitJoinIntro} onClose={() => setTrivia(false)} />}
 
       {showMenu && (
         <MenuSheet
@@ -437,9 +460,10 @@ function TableCard({
         <span className="mx-auto w-14 h-14 rounded-full bg-white border border-line flex items-center justify-center shadow-sm">
           <Utensils className="w-6 h-6 text-ember" aria-hidden />
         </span>
-        <h1 className="display text-2xl font-bold">{t.tableOrderTitle}</h1>
+        {/* No menu and nothing ordered: a friendly welcome instead of an empty "order" screen. */}
+        <h1 className="display text-2xl font-bold">{hasMenu || shown.length > 0 ? t.tableOrderTitle : t.seatedWelcomeTitle}</h1>
         {label && <p className="text-sm font-extrabold text-ember">{fmt(t.tableLabelShow, { t: label })}</p>}
-        <p className="text-sm text-stone-600">{t.tableOrderBody}</p>
+        <p className="text-sm text-stone-600">{hasMenu || shown.length > 0 ? t.tableOrderBody : t.seatedWelcomeBody}</p>
       </div>
 
       {shown.length > 0 && (

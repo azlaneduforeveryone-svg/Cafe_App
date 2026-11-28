@@ -21,7 +21,7 @@ function clockPhase(startsAt: number, total: number, now: number) {
   return into <= T.answer ? { phase: "question" as const, index, left: Math.ceil(T.answer - into) } : { phase: "reveal" as const, index, left: Math.ceil(SLOT - into) };
 }
 
-export function TriviaSheet({ t, locale, endpoint, goneText, onClose }: { t: Dict; locale: Locale; endpoint: string; goneText?: string; onClose: () => void }) {
+export function TriviaSheet({ t, locale, endpoint, goneText, intro, onClose }: { t: Dict; locale: Locale; endpoint: string; goneText?: string; intro?: string; onClose: () => void }) {
   const url = endpoint;
   const d = t as unknown as Record<string, string>;
   const [snap, setSnap] = useState<TriviaSnapshot | null>(null);
@@ -121,7 +121,7 @@ export function TriviaSheet({ t, locale, endpoint, goneText, onClose }: { t: Dic
                 if (name.trim()) void act({ action: "join", nickname: name });
               }}
             >
-              <p className="text-white/80 text-sm">{t.trvJoinIntro}</p>
+              <p className="text-white/80 text-sm">{intro ?? t.trvJoinIntro}</p>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value.slice(0, 16))}

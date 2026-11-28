@@ -7,9 +7,9 @@ import Link from "next/link";
  */
 export function Brand({ name, href = "/", dark = true }: { name: string; href?: string; dark?: boolean }) {
   return (
-    <Link href={href} className="flex items-center gap-2">
+    <Link href={href} className="flex items-center gap-2 shrink-0">
       <Image src="/brand/mascot.png" alt="" width={40} height={40} priority className="w-10 h-10 object-contain" />
-      <span className={`font-extrabold tracking-tight text-lg ${dark ? "text-white" : "text-ink"}`}>{name}</span>
+      <span className={`whitespace-nowrap font-extrabold tracking-tight text-base sm:text-lg ${dark ? "text-white" : "text-ink"}`}>{name}</span>
     </Link>
   );
 }

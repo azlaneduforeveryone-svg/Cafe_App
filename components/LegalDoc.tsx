@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Brand } from "./Brand";
+import { HtmlLang } from "./HtmlLang";
 
 export type LegalSection = { h: string; p?: string[]; list?: string[] };
 
@@ -7,6 +8,7 @@ export type LegalSection = { h: string; p?: string[]; list?: string[] };
 export function LegalDoc({ title, updated, intro, sections }: { title: string; updated: string; intro: string; sections: LegalSection[] }) {
   return (
     <div lang="en" dir="ltr" className="flex-1 flex flex-col bg-cream">
+      <HtmlLang locale="en" dir="ltr" />
       <header className="bg-ink">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link href="/" aria-label="Table & Bell home">
