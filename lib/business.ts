@@ -1,4 +1,5 @@
 import "server-only";
+import { cleanName } from "./text";
 import { logActivity } from "./activity";
 import { isDemoRestaurant } from "./demo";
 import type { StaffContext } from "./auth";
@@ -15,7 +16,7 @@ import { adminClient } from "./supabase/admin";
 type Result = { ok: true } | { ok: false; error: string; status: number };
 const fail = (error: string, status = 400) => ({ ok: false as const, error, status });
 const CODE = /^[A-Za-z0-9-]{0,30}$/;
-const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+const clean = (v: unknown, max: number) => cleanName(v, max);
 
 export async function updateContact(ctx: StaffContext, b: Record<string, unknown>): Promise<Result> {
   if (isDemoRestaurant(ctx.restaurant)) return fail("demo_locked", 403);

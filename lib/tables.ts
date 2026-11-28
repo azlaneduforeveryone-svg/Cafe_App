@@ -1,4 +1,5 @@
 import "server-only";
+import { cleanText } from "./text";
 import { cookies } from "next/headers";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
@@ -22,7 +23,7 @@ import type { Bill, BillSummary, LoyaltyMode, LoyaltyPromo, Order, PublicRestaur
 type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string; status: number };
 const fail = (error: string, status: number) => ({ ok: false as const, error, status });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const str = (v: unknown, max: number) => cleanText(v, max);
 
 export const SESSION_HOURS = 8;
 export const cookieName = (tableId: string) => `tp_t_${tableId.replace(/-/g, "")}`;

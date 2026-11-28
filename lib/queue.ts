@@ -1,4 +1,5 @@
 import "server-only";
+import { cleanName } from "./text";
 import { billForEntry, billSummaries } from "./bills";
 import { loyaltyPromo } from "./loyalty";
 import { inbox } from "./notify";
@@ -418,7 +419,7 @@ export interface JoinInput {
 }
 
 export async function joinQueue(r: Restaurant, input: JoinInput, source: "qr" | "walkin"): Promise<Result<Entry>> {
-  const name = typeof input.name === "string" ? input.name.trim().slice(0, 60) : "";
+  const name = cleanName(input.name, 60);
   const partySize = Number(input.partySize);
   const phone = typeof input.phone === "string" ? input.phone.trim() : "";
   if (!name) return fail("name_required", 400);
@@ -572,6 +573,8 @@ export async function createRestaurantForUser(input: {
   ownerName: string;
   restaurantName: string;
   country: Country;
+  /** When the owner ticked "I accept the Terms and Privacy Policy" at signup. */
+  termsAcceptedAt?: string;
 }): Promise<Result<Restaurant>> {
   const baseSlug = input.restaurantName
     .toLowerCase()
@@ -592,5 +595,9 @@ export async function createRestaurantForUser(input: {
     const e = dbError(error.message);
     return fail(e.error, e.status);
   }
-  return { ok: true, value: toRestaurant(data as RestaurantRow) };
+  const row = data as RestaurantRow;
+  if (input.termsAcceptedAt) {
+    await adminClient().from("restaurants").update({ terms_accepted_at: input.termsAcceptedAt }).eq("id", row.id);
+  }
+  return { ok: true, value: toRestaurant(row) };
 }

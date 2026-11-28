@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { SUPABASE_PUBLIC_KEY, SUPABASE_URL } from "@/lib/supabase/env";
+import { hardenCookie } from "@/lib/supabase/cookies";
 
 /**
  * Keeps staff logins fresh. Supabase access tokens expire after about an hour;
@@ -19,7 +20,7 @@ export async function proxy(request: NextRequest) {
       setAll(cookiesToSet, headers) {
         for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
         response = NextResponse.next({ request });
-        for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options);
+        for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, hardenCookie(options));
         for (const [key, value] of Object.entries(headers ?? {})) response.headers.set(key, value);
       },
     },

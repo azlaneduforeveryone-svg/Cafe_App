@@ -3,6 +3,7 @@ import { fail, json, readBody } from "@/lib/api";
 import { siteOrigin } from "@/lib/locale";
 import { PHONE_DOMAIN } from "@/lib/staff";
 import { isDemoEmail } from "@/lib/demo";
+import { clientIp, overLimit } from "@/lib/rateLimit";
 
 /** Sends a password reset email. Always answers "ok" so it can't be used to test which emails exist. */
 export async function POST(req: Request) {
@@ -12,6 +13,15 @@ export async function POST(req: Request) {
   if (email.trim().toLowerCase().endsWith(`@${PHONE_DOMAIN}`)) return json({ ok: true });
   // No reset emails for the shared demo login.
   if (isDemoEmail(email)) return json({ ok: true });
+  // Limit reset emails per IP and per address. Still answer "ok" so this can't reveal accounts.
+  if (
+    await overLimit(
+      { key: `forgot-ip:${await clientIp()}`, windowSec: 3600, max: 5 },
+      { key: `forgot-acct:${email.trim().toLowerCase()}`, windowSec: 3600, max: 3 },
+    )
+  ) {
+    return json({ ok: true });
+  }
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo: `${await siteOrigin()}/auth/confirm?next=/reset-password`,

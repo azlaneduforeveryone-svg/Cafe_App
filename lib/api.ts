@@ -7,6 +7,11 @@ export const fail = (error: string, status: number) => Response.json({ error }, 
 
 export async function readBody(req: Request): Promise<Record<string, unknown>> {
   try {
+    // Plain HTML form posts (before the page's JavaScript has loaded) arrive form-encoded.
+    const type = req.headers.get("content-type") ?? "";
+    if (type.includes("application/x-www-form-urlencoded") || type.includes("multipart/form-data")) {
+      return Object.fromEntries((await req.formData()).entries());
+    }
     const b = await req.json();
     return b && typeof b === "object" ? (b as Record<string, unknown>) : {};
   } catch {

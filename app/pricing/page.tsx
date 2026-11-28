@@ -13,6 +13,7 @@ import { HOST_COOKIE, hostLocale } from "@/lib/locale";
 import { PRICING, money } from "@/lib/pricing";
 import { FREE_LIMIT } from "@/lib/queue";
 import type { Country } from "@/lib/types";
+import { LegalLinks } from "@/components/LegalLinks";
 
 export default async function PricingPage({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
   const { region: q } = await searchParams;
@@ -177,6 +178,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           </div>
         )}
       </main>
+      <footer className="border-t border-line py-6 text-center text-xs text-stone-500">
+        <LegalLinks t={t} />
+      </footer>
     </LocaleRoot>
   );
 }

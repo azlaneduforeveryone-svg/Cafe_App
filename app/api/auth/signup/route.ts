@@ -3,17 +3,25 @@ import { adminClient } from "@/lib/supabase/admin";
 import { fail, json, readBody } from "@/lib/api";
 import { siteOrigin } from "@/lib/locale";
 import { createRestaurantForUser } from "@/lib/queue";
+import { passwordProblem } from "@/lib/password";
+import { cleanName } from "@/lib/text";
+import { clientIp, overLimit, tooMany } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
+  if (await overLimit({ key: `signup-ip:${await clientIp()}`, windowSec: 3600, max: 5 })) return tooMany(3600);
   const b = await readBody(req);
-  const name = typeof b.name === "string" ? b.name.trim().slice(0, 60) : "";
+  const name = cleanName(b.name, 60);
   const email = typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
   const password = typeof b.password === "string" ? b.password : "";
-  const restaurantName = typeof b.restaurantName === "string" ? b.restaurantName.trim().slice(0, 80) : "";
+  const restaurantName = cleanName(b.restaurantName, 80);
+  // The owner must accept the Terms and Privacy Policy (checkbox on the signup form).
+  const accepted = b.acceptTerms === true || b.acceptTerms === "on" || b.acceptTerms === "true";
   const country = b.country === "SA" || b.country === "PK" ? b.country : null;
-  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || !restaurantName || !country) {
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !restaurantName || !country) {
     return fail("fields", 400);
   }
+  if (passwordProblem(password, email)) return fail("weak_password", 400);
+  if (!accepted) return fail("terms", 400);
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -36,7 +44,7 @@ export async function POST(req: Request) {
   const user = data.user;
   if (!user || (Array.isArray(user.identities) && user.identities.length === 0)) return fail("exists", 409);
 
-  const created = await createRestaurantForUser({ userId: user.id, ownerName: name, restaurantName, country });
+  const created = await createRestaurantForUser({ userId: user.id, ownerName: name, restaurantName, country, termsAcceptedAt: new Date().toISOString() });
   if (!created.ok) {
     // Don't leave a login without a restaurant behind.
     await supabase.auth.signOut().catch(() => {});

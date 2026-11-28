@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { SUPABASE_PUBLIC_KEY, SUPABASE_URL, assertPublicEnv } from "./env";
+import { hardenCookie } from "./cookies";
 
 /**
  * Supabase client acting as the logged-in staff member (reads the auth cookies).
@@ -19,7 +20,7 @@ export async function createClient() {
       },
       setAll(cookiesToSet) {
         try {
-          for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options);
+          for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, hardenCookie(options));
         } catch {
           // Called from a Server Component, where cookies are read-only.
           // proxy.ts refreshes the session cookies on the next request instead.

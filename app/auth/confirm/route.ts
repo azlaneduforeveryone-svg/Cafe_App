@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
@@ -6,7 +7,7 @@ const OTP_TYPES: EmailOtpType[] = ["signup", "email", "recovery", "invite", "mag
 
 /** Only same-site paths, so the link can't bounce people to another website. */
 function safeNext(v: string | null) {
-  return v && v.startsWith("/") && !v.startsWith("//") ? v : "/dashboard";
+  return v && /^\/(?![\/\\])/.test(v) && !/[\r\n]/.test(v) ? v : "/dashboard";
 }
 
 /**
@@ -25,10 +26,22 @@ export async function GET(request: Request) {
 
   if (tokenHash && type && OTP_TYPES.includes(type)) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) redirect(type === "recovery" ? "/reset-password" : next);
+    if (!error) {
+      await clearVerifiers();
+      redirect(type === "recovery" ? "/reset-password" : next);
+    }
   } else if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) redirect(next);
+    if (!error) {
+      await clearVerifiers();
+      redirect(next);
+    }
   }
   redirect("/login?error=link");
+}
+
+/** Login links leave short-lived "code-verifier" cookies behind; remove them once used. */
+async function clearVerifiers() {
+  const jar = await cookies();
+  for (const c of jar.getAll()) if (c.name.endsWith("-code-verifier")) jar.delete(c.name);
 }

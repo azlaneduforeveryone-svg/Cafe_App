@@ -4,6 +4,7 @@ import { LocaleRoot } from "./LocaleRoot";
 import { HOST_COOKIE } from "@/lib/locale";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/types";
+import { LegalLinks } from "./LegalLinks";
 
 export function AuthShell({ t, locale, title, sub, children }: { t: Dict; locale: Locale; title: string; sub: string; children: React.ReactNode }) {
   return (
@@ -21,6 +22,9 @@ export function AuthShell({ t, locale, title, sub, children }: { t: Dict; locale
           {children}
         </div>
       </main>
+      <footer className="pb-6 text-center text-xs text-stone-500">
+        <LegalLinks t={t} />
+      </footer>
     </LocaleRoot>
   );
 }

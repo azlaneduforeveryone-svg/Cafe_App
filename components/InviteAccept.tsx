@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/password";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dict } from "@/lib/i18n";
@@ -40,12 +41,12 @@ export function InviteAccept({ t, token, login }: { t: Dict; token: string; logi
       </div>
       <label className="block space-y-1.5">
         <span className="text-sm font-bold">{t.password}</span>
-        <input name="password" type="password" required minLength={8} maxLength={72} autoComplete="new-password" className={input} />
+        <input name="password" type="password" required minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} autoComplete="new-password" className={input} />
         <span className="block text-xs text-stone-500">{t.passwordHelp}</span>
       </label>
       <label className="block space-y-1.5">
         <span className="text-sm font-bold">{t.invConfirm}</span>
-        <input name="confirm" type="password" required minLength={8} maxLength={72} autoComplete="new-password" className={input} />
+        <input name="confirm" type="password" required minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} autoComplete="new-password" className={input} />
       </label>
       {error && (
         <p role="alert" className="text-sm font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">

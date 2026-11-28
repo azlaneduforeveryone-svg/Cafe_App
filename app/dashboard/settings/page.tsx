@@ -2,6 +2,8 @@ import QRCode from "qrcode";
 import { HostTopBar } from "@/components/HostTopBar";
 import { LocaleRoot } from "@/components/LocaleRoot";
 import { BusinessCard } from "@/components/host/BusinessCard";
+import { AccountCard } from "@/components/host/AccountCard";
+import { isDemoEmail } from "@/lib/demo";
 import { ContactEmails } from "@/components/ContactEmails";
 import { LogoCard } from "@/components/host/LogoCard";
 import { can } from "@/lib/permissions";
@@ -45,6 +47,9 @@ export default async function SettingsPage() {
           <div className="mt-5">
             {/* Legal details are only passed to the page for the owner, so a manager's browser never receives them. */}
             <BusinessCard t={t} contact={r.contact} legal={can(staff.role, "business.legal") ? r.business : null} />
+          </div>
+          <div className="mt-5">
+            <AccountCard t={t} demo={isDemoEmail(staff.email)} />
           </div>
         </div>
 

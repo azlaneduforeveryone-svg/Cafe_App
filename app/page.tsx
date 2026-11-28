@@ -12,6 +12,7 @@ import { FREE_LIMIT, getRestaurantBySlug } from "@/lib/queue";
 import { ContactEmails } from "@/components/ContactEmails";
 import { salesContact } from "@/lib/contact";
 import { DEMO_SLUG } from "@/lib/demo";
+import { LegalLinks } from "@/components/LegalLinks";
 
 export default async function Landing() {
   const locale = await hostLocale();
@@ -176,7 +177,8 @@ export default async function Landing() {
       </section>
 
       <footer className="border-t border-line py-6 text-center text-xs text-stone-500">
-        <p>{t.footer}</p>
+        <LegalLinks t={t} />
+        <p className="mt-2">© {new Date().getFullYear()} Table &amp; Bell</p>
       </footer>
     </LocaleRoot>
   );

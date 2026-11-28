@@ -17,7 +17,7 @@ export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; loc
   const [partySize, setPartySize] = useState(2);
   const [sectionId, setSectionId] = useState(restaurant.sections[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [existing, setExisting] = useState<string | null>(null);
 
   // Offer "Open my ticket" only if the saved ticket still exists and is still in line.
@@ -51,36 +51,40 @@ export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; loc
     e.preventDefault();
     unlockAudio(); // this tap lets the ticket page play the chime later
     setBusy(true);
-    setError(false);
+    setError(null);
     const form = new FormData(e.currentTarget);
     const res = await fetch(`/api/r/${restaurant.slug}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: form.get("name"), phone: form.get("phone"), partySize, sectionId, lang: locale }),
     }).catch(() => null);
-    if (res?.ok) {
-      const { token } = (await res.json()) as { token: string };
+    const out = res ? ((await res.json().catch(() => ({}))) as { token?: string; error?: string }) : {};
+    // 409: this phone already has a ticket here, so open that one instead.
+    if ((res?.ok || res?.status === 409) && out.token) {
       try {
-        localStorage.setItem(ticketKey(restaurant.slug), token);
+        localStorage.setItem(ticketKey(restaurant.slug), out.token);
       } catch {}
-      router.push(`/r/${restaurant.slug}/t/${token}`);
+      router.push(`/r/${restaurant.slug}/t/${out.token}`);
     } else {
-      setError(true);
+      setError(res?.status === 429 ? t.errRateLimit : t.errorGeneric);
       setBusy(false);
     }
   }
 
+  if (existing) {
+    return (
+      <div className="p-4 rounded-2xl bg-amber-50 border border-gold/50 text-sm font-semibold space-y-3 text-center">
+        <p>{t.existingTicket}</p>
+        <Link href={`/r/${restaurant.slug}/t/${existing}`} className="inline-flex px-4 py-2.5 rounded-xl bg-ink text-white font-bold items-center gap-1.5">
+          <Ticket className="w-4 h-4" aria-hidden />
+          {t.openTicket}
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={submit} className="space-y-4">
-      {existing && (
-        <div className="p-3 rounded-2xl bg-amber-50 border border-gold/50 text-xs font-semibold flex items-center justify-between gap-2">
-          <span>{t.existingTicket}</span>
-          <Link href={`/r/${restaurant.slug}/t/${existing}`} className="shrink-0 px-3 py-1.5 rounded-lg bg-ink text-white font-bold inline-flex items-center gap-1">
-            <Ticket className="w-3.5 h-3.5" aria-hidden />
-            {t.openTicket}
-          </Link>
-        </div>
-      )}
 
       <div className="bg-white rounded-2xl p-3.5 border border-line shadow-sm flex items-center justify-between gap-3">
         <div>
@@ -90,7 +94,7 @@ export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; loc
         <div className="shrink-0 bg-cream border border-gold/50 rounded-xl px-3 py-2 text-center">
           <span className="block text-[10px] font-bold uppercase text-stone-500">{t.estWait}</span>
           <span className="text-base font-extrabold text-ember">
-            ~{eta} {t.min}
+            {waiting === 0 ? t.noWait : `~${eta} ${t.min}`}
           </span>
           <span className="block text-[10px] text-stone-500">{fmt(t.partiesWaiting, { n: waiting })}</span>
         </div>
@@ -159,10 +163,15 @@ export function JoinForm({ t, locale, restaurant, eta, waiting }: { t: Dict; loc
           placeholder={restaurant.country === "SA" ? "+966 5X XXX XXXX" : "+92 3XX XXXXXXX"}
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-line text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ember"
         />
-        <span className="block text-[11px] text-stone-500 mt-1">{t.phoneHelp}</span>
+        <span className="block text-[11px] text-stone-500 mt-1">
+          {t.phoneHelp}{" "}
+          <Link href="/privacy" target="_blank" className="underline font-semibold text-stone-600">
+            {t.privacyLink}
+          </Link>
+        </span>
       </label>
 
-      {error && <p role="alert" className="text-sm font-semibold text-red-700">{t.errorGeneric}</p>}
+      {error && <p role="alert" className="text-sm font-semibold text-red-700">{error}</p>}
 
       <button
         type="submit"

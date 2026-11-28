@@ -18,7 +18,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         mode="login"
         t={t}
         defaultCountry="PK"
-        initialError={error === "link" ? t.errLink : undefined}
+        initialError={
+          error === "link"
+            ? t.errLink
+            : error === "invalid"
+              ? t.errInvalid
+              : error === "rate_limited"
+                ? t.errRateLimit
+                : error === "not_confirmed"
+                  ? t.errNotConfirmed
+                  : undefined
+        }
         next={dest}
       />
     </AuthShell>

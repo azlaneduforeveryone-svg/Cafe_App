@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/password";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +13,7 @@ const button = "w-full py-3.5 rounded-2xl bg-ember hover:bg-ember-dark disabled:
 function errorText(t: Dict, code?: string) {
   if (code === "rate_limited") return t.errRateLimit;
   if (code === "fields") return t.errFields;
+  if (code === "weak_password") return t.errWeakPassword;
   if (code === "no_session") return t.resetNeedsLink;
   return t.errorGeneric;
 }
@@ -92,7 +94,7 @@ export function ResetForm({ t }: { t: Dict }) {
     >
       <label className="block">
         <span className="block text-xs font-bold text-stone-700 mb-1">{t.newPassword}</span>
-        <input name="password" type="password" required minLength={8} dir="ltr" autoComplete="new-password" className={input} />
+        <input name="password" type="password" required minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} dir="ltr" autoComplete="new-password" className={input} />
         <span className="block text-[11px] text-stone-500 mt-1">{t.passwordHelp}</span>
       </label>
       {error && <p role="alert" className="text-sm font-semibold text-red-700">{error}</p>}

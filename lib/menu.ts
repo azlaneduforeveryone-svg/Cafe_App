@@ -1,4 +1,5 @@
 import "server-only";
+import { cleanText } from "./text";
 import { notifyOutOfStock, notifyReady } from "./notify";
 import { adminClient } from "./supabase/admin";
 import { broadcastChange } from "./realtime";
@@ -20,7 +21,7 @@ function dbFail(message: string | undefined) {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const str = (v: unknown, max: number) => cleanText(v, max);
 const money = (v: unknown) => {
   const n = Math.round(Number(v) * 100) / 100;
   return Number.isFinite(n) && n >= 0 && n < 10_000_000 ? n : null;

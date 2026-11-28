@@ -3,6 +3,7 @@ import { LangSwitch } from "@/components/LangSwitch";
 import { restaurantName } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Locale, PublicRestaurant } from "@/lib/types";
+import { LegalLinks } from "@/components/LegalLinks";
 
 /**
  * Phone-sized card. Full screen on a phone, centred on larger screens.
@@ -52,7 +53,10 @@ export function GuestFrame({
           <LangSwitch current={locale} cookie="tp_glang" tone="light" />
         </header>
         <div className="flex-1 p-5 flex flex-col">{children}</div>
-        <p className={`text-center text-[10px] pb-3 ${ready ? "text-emerald-200" : "text-stone-400"}`}>{t.brand}</p>
+        <div className={`text-center text-[10px] pb-3 space-y-0.5 ${ready ? "text-emerald-200" : "text-stone-400"}`}>
+          <p>{t.brand}</p>
+          <LegalLinks t={t} />
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import "server-only";
+import { cleanName } from "./text";
+import { passwordProblem } from "./password";
 import { isDemoRestaurant } from "./demo";
 import { createHash, randomBytes } from "node:crypto";
 import { logActivity } from "./activity";
@@ -95,7 +97,7 @@ export async function listStaff(ctx: StaffContext): Promise<{ staff: StaffMember
   return { staff, invites, seats: { used, limit: seatLimit(ctx.restaurant.plan === "pro") } };
 }
 
-const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+const clean = (v: unknown, max: number) => cleanName(v, max);
 
 /** Create a one-time invite. The link (with the token) is returned once and never stored. */
 export async function createInvite(ctx: StaffContext, b: Record<string, unknown>): Promise<Result<{ link: string; share: string; contactType: "email" | "phone" }>> {
@@ -229,10 +231,10 @@ export async function viewInvite(token: string): Promise<InviteView | null> {
 
 /** The invited person sets a password; the account is created and they are logged in. */
 export async function acceptInvite(token: string, password: unknown): Promise<Result<{ home: string }>> {
-  if (typeof password !== "string" || password.length < 8 || password.length > 72) return fail("weak_password", 400);
   const i = await inviteRow(token);
   if (!i) return fail("invite_invalid", 410);
   const email = i.contact_type === "email" ? i.contact : phoneLoginEmail(i.contact);
+  if (typeof password !== "string" || passwordProblem(password, i.contact_type === "email" ? email : undefined)) return fail("weak_password", 400);
   if (await authUserExists(email)) return fail("account_exists", 409);
 
   const admin = adminClient();
